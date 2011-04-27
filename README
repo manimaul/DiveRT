@@ -1,0 +1,5 @@
+DiveRT <Dive Recovery Tracker>
+Copyright (C) 2011 Will Kamp <manimaul!gmail.com>
+
+Records diver and tender dive times, position and bearing data in a sqlite3 database
+Connects to Nema0183 GPS and bearing sensor (reads HDG, RMC, GGA data)
