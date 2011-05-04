@@ -577,18 +577,18 @@ class GridPanel ( wx.Panel ):
 	def __init__( self, parent ):
 		wx.Panel.__init__ ( self, parent, id = wx.ID_ANY, pos = wx.DefaultPosition, size = wx.Size( 500,300 ), style = wx.TAB_TRAVERSAL )
 		
-		bSizer6 = wx.BoxSizer( wx.VERTICAL )
+		self.bSizer = wx.BoxSizer( wx.VERTICAL )
 		
 		self.m_staticText19 = wx.StaticText( self, wx.ID_ANY, u"Dive Table", wx.DefaultPosition, wx.DefaultSize, 0 )
 		self.m_staticText19.Wrap( -1 )
 		self.m_staticText19.SetFont( wx.Font( 12, 70, 90, 92, False, wx.EmptyString ) )
 		
-		bSizer6.Add( self.m_staticText19, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
+		self.bSizer.Add( self.m_staticText19, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
 		
 		self.m_staticline36 = wx.StaticLine( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
-		bSizer6.Add( self.m_staticline36, 0, wx.EXPAND |wx.ALL, 5 )
+		self.bSizer.Add( self.m_staticline36, 0, wx.EXPAND |wx.ALL, 5 )
 		
-		fgSizer12 = wx.FlexGridSizer( 1, 3, 0, 0 )
+		fgSizer12 = wx.FlexGridSizer( 1, 4, 0, 0 )
 		fgSizer12.SetFlexibleDirection( wx.BOTH )
 		fgSizer12.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
 		
@@ -597,34 +597,50 @@ class GridPanel ( wx.Panel ):
 		fgSizer12.Add( self.m_staticText39, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
 		
 		cround_choiceChoices = []
-		self.cround_choice = wx.Choice( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, cround_choiceChoices, 0 )
+		self.cround_choice = wx.Choice( self, wx.ID_ANY, wx.DefaultPosition, wx.Size( 50,-1 ), cround_choiceChoices, 0 )
 		self.cround_choice.SetSelection( 0 )
 		fgSizer12.Add( self.cround_choice, 0, wx.ALL, 5 )
 		
 		self.newRound_button = wx.Button( self, wx.ID_ANY, u"Start New Round", wx.DefaultPosition, wx.DefaultSize, 0 )
 		fgSizer12.Add( self.newRound_button, 0, wx.ALL, 5 )
 		
-		bSizer6.Add( fgSizer12, 0, 0, 5 )
+		self.report_button = wx.Button( self, wx.ID_ANY, u"View Round Report", wx.DefaultPosition, wx.DefaultSize, 0 )
+		fgSizer12.Add( self.report_button, 0, wx.ALL, 5 )
+		
+		self.bSizer.Add( fgSizer12, 0, 0, 5 )
 		
 		self.grid = Grid.CustTableGrid(self,  'C:\ProgramData\DiveRT\DiveRT.db')
-		bSizer6.Add( self.grid, 0, wx.ALL, 5 )
+		self.bSizer.Add( self.grid, 0, wx.ALL, 5 )
 		
-		self.SetSizer( bSizer6 )
+		self.test_panel = wx.Panel( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
+		self.test_panel.SetBackgroundColour( wx.Colour( 153, 180, 209 ) )
+		
+		self.bSizer.Add( self.test_panel, 1, wx.ALL|wx.EXPAND, 5 )
+		
+		self.SetSizer( self.bSizer )
 		self.Layout()
 		
 		# Connect Events
+		self.Bind( wx.EVT_MOUSEWHEEL, self._evtScrollWheel )
 		self.cround_choice.Bind( wx.EVT_CHOICE, self._evtRoundChange )
 		self.newRound_button.Bind( wx.EVT_BUTTON, self._evtNewRound )
+		self.report_button.Bind( wx.EVT_BUTTON, self._evtReport )
 	
 	def __del__( self ):
 		pass
 	
 	
 	# Virtual event handlers, overide them in your derived class
+	def _evtScrollWheel( self, event ):
+		event.Skip()
+	
 	def _evtRoundChange( self, event ):
 		event.Skip()
 	
 	def _evtNewRound( self, event ):
+		event.Skip()
+	
+	def _evtReport( self, event ):
 		event.Skip()
 	
 
@@ -787,5 +803,280 @@ class CrewManager ( wx.Dialog ):
 	
 	def _evtSave( self, event ):
 		event.Skip()
+	
+
+###########################################################################
+## Class About
+###########################################################################
+
+class About ( wx.Dialog ):
+	
+	def __init__( self, parent ):
+		wx.Dialog.__init__ ( self, parent, id = wx.ID_ANY, title = u"About DiveRT", pos = wx.DefaultPosition, size = wx.DefaultSize, style = wx.DEFAULT_DIALOG_STYLE )
+		
+		self.SetSizeHintsSz( wx.DefaultSize, wx.DefaultSize )
+		
+		bSizer12 = wx.BoxSizer( wx.VERTICAL )
+		
+		self.m_staticText40 = wx.StaticText( self, wx.ID_ANY, u"Dive RT", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText40.Wrap( -1 )
+		self.m_staticText40.SetFont( wx.Font( 12, 70, 90, 92, False, wx.EmptyString ) )
+		
+		bSizer12.Add( self.m_staticText40, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
+		
+		self.bssm_bitmap = wx.StaticBitmap( self, wx.ID_ANY, wx.Bitmap( u"icons/bssm.png", wx.BITMAP_TYPE_ANY ), wx.DefaultPosition, wx.DefaultSize, 0 )
+		bSizer12.Add( self.bssm_bitmap, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
+		
+		self._staticText41 = wx.StaticText( self, wx.ID_ANY, u"DiveRT <Dive Recovery Tracker>\nCopyright (C) 2011 Will Kamp <manimaul!gmail.com>\n\nDiveRT was created by and for the crew aboard Tahta.  Use of DiveRT without the expressed permission from Will Kamp is prohibited.\n\nDiveRT records diver and tender dive times, position and bearing data into a sqlite3 database\nConnects to Nema0183 GPS and bearing sensor (reads HDG, RMC, GGA data)", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self._staticText41.Wrap( -1 )
+		bSizer12.Add( self._staticText41, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
+		
+		self.m_button10 = wx.Button( self, wx.ID_ANY, u"OK", wx.DefaultPosition, wx.DefaultSize, 0 )
+		bSizer12.Add( self.m_button10, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
+		
+		self.SetSizer( bSizer12 )
+		self.Layout()
+		bSizer12.Fit( self )
+		
+		self.Centre( wx.BOTH )
+		
+		# Connect Events
+		self.Bind( wx.EVT_CLOSE, self._evtOK )
+		self.m_button10.Bind( wx.EVT_BUTTON, self._evtOK )
+	
+	def __del__( self ):
+		pass
+	
+	
+	# Virtual event handlers, overide them in your derived class
+	def _evtOK( self, event ):
+		event.Skip()
+	
+	
+
+###########################################################################
+## Class RoundReport
+###########################################################################
+
+class RoundReport ( wx.Dialog ):
+	
+	def __init__( self, parent ):
+		wx.Dialog.__init__ ( self, parent, id = wx.ID_ANY, title = u"Cleanup Round Report", pos = wx.DefaultPosition, size = wx.DefaultSize, style = wx.DEFAULT_DIALOG_STYLE )
+		
+		self.SetSizeHintsSz( wx.DefaultSize, wx.DefaultSize )
+		
+		self.bSizer = wx.BoxSizer( wx.VERTICAL )
+		
+		self.m_staticText44 = wx.StaticText( self, wx.ID_ANY, u"Cleanup / Round Report", wx.DefaultPosition, wx.Size( -1,-1 ), 0 )
+		self.m_staticText44.Wrap( -1 )
+		self.m_staticText44.SetFont( wx.Font( 12, 70, 90, 92, False, wx.EmptyString ) )
+		
+		self.bSizer.Add( self.m_staticText44, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
+		
+		self.m_staticline14 = wx.StaticLine( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
+		self.bSizer.Add( self.m_staticline14, 0, wx.EXPAND |wx.ALL, 5 )
+		
+		fgSizer20 = wx.FlexGridSizer( 2, 2, 0, 0 )
+		fgSizer20.SetFlexibleDirection( wx.BOTH )
+		fgSizer20.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
+		
+		self.m_staticText60 = wx.StaticText( self, wx.ID_ANY, u"Cleanup / Round", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText60.Wrap( -1 )
+		fgSizer20.Add( self.m_staticText60, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+		
+		self.round_textCtrl = wx.TextCtrl( self, wx.ID_ANY, u"0", wx.DefaultPosition, wx.Size( 30,-1 ), wx.TE_READONLY )
+		self.round_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+		
+		fgSizer20.Add( self.round_textCtrl, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+		
+		self.bSizer.Add( fgSizer20, 0, wx.ALIGN_CENTER_HORIZONTAL, 5 )
+		
+		self.m_staticline13 = wx.StaticLine( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
+		self.bSizer.Add( self.m_staticline13, 0, wx.EXPAND |wx.ALL, 5 )
+		
+		fgSizer14 = wx.FlexGridSizer( 99, 3, 0, 0 )
+		fgSizer14.SetFlexibleDirection( wx.BOTH )
+		fgSizer14.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
+		
+		self.m_staticText42 = wx.StaticText( self, wx.ID_ANY, u"Total Dive Time", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText42.Wrap( -1 )
+		fgSizer14.Add( self.m_staticText42, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+		
+		self.totalHours_textCtrl = wx.TextCtrl( self, wx.ID_ANY, u"0:00", wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+		self.totalHours_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+		
+		fgSizer14.Add( self.totalHours_textCtrl, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+		
+		self.m_staticText77 = wx.StaticText( self, wx.ID_ANY, u"(Hours)", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText77.Wrap( -1 )
+		fgSizer14.Add( self.m_staticText77, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+		
+		self.m_staticText43 = wx.StaticText( self, wx.ID_ANY, u"Total Gold Recovered", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText43.Wrap( -1 )
+		fgSizer14.Add( self.m_staticText43, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+		
+		self.totalGrams_textCtrl = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+		fgSizer14.Add( self.totalGrams_textCtrl, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+		
+		self.m_staticText75 = wx.StaticText( self, wx.ID_ANY, u"(Grams)", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText75.Wrap( -1 )
+		fgSizer14.Add( self.m_staticText75, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+		
+		self.m_staticText50 = wx.StaticText( self, wx.ID_ANY, u"London Spot", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText50.Wrap( -1 )
+		fgSizer14.Add( self.m_staticText50, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+		
+		self.londonSpot_textCtrl = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+		fgSizer14.Add( self.londonSpot_textCtrl, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+		
+		self.m_staticText65 = wx.StaticText( self, wx.ID_ANY, u"(US Dollars per Troy Oz)", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText65.Wrap( -1 )
+		fgSizer14.Add( self.m_staticText65, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+		
+		self.m_staticText51 = wx.StaticText( self, wx.ID_ANY, u"Estimated percentage\nafter refinement loss", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText51.Wrap( -1 )
+		fgSizer14.Add( self.m_staticText51, 0, wx.ALL, 5 )
+		
+		self.percentLoss_textCtrl = wx.TextCtrl( self, wx.ID_ANY, u"80", wx.DefaultPosition, wx.DefaultSize, 0 )
+		fgSizer14.Add( self.percentLoss_textCtrl, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+		
+		self.m_staticText52 = wx.StaticText( self, wx.ID_ANY, u"(%)", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText52.Wrap( -1 )
+		fgSizer14.Add( self.m_staticText52, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+		
+		self.m_staticText78 = wx.StaticText( self, wx.ID_ANY, u"Estimated Total\nValue", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText78.Wrap( -1 )
+		fgSizer14.Add( self.m_staticText78, 0, wx.ALL, 5 )
+		
+		self.estTotal_textCtrl = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+		self.estTotal_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+		
+		fgSizer14.Add( self.estTotal_textCtrl, 0, wx.ALL, 5 )
+		
+		self.m_staticText79 = wx.StaticText( self, wx.ID_ANY, u"(US Dollars)", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText79.Wrap( -1 )
+		fgSizer14.Add( self.m_staticText79, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+		
+		self.bSizer.Add( fgSizer14, 1, wx.EXPAND, 5 )
+		
+		self.m_staticline12 = wx.StaticLine( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
+		self.bSizer.Add( self.m_staticline12, 0, wx.EXPAND |wx.ALL, 5 )
+		
+		self.m_staticText61 = wx.StaticText( self, wx.ID_ANY, u"Diving", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText61.Wrap( -1 )
+		self.m_staticText61.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), 70, 90, 92, False, wx.EmptyString ) )
+		
+		self.bSizer.Add( self.m_staticText61, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
+		
+		self.diving_fgSizer = wx.FlexGridSizer( 99, 5, 0, 0 )
+		self.diving_fgSizer.SetFlexibleDirection( wx.BOTH )
+		self.diving_fgSizer.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
+		
+		self.m_staticText45 = wx.StaticText( self, wx.ID_ANY, u"Diver\nName", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText45.Wrap( -1 )
+		self.diving_fgSizer.Add( self.m_staticText45, 0, wx.ALL, 5 )
+		
+		self.m_staticText46 = wx.StaticText( self, wx.ID_ANY, u"Diver's\nHours", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText46.Wrap( -1 )
+		self.diving_fgSizer.Add( self.m_staticText46, 0, wx.ALL, 5 )
+		
+		self.m_staticText47 = wx.StaticText( self, wx.ID_ANY, u"Pay Rate\n(% of time)", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText47.Wrap( -1 )
+		self.diving_fgSizer.Add( self.m_staticText47, 0, wx.ALL, 5 )
+		
+		self.m_staticText48 = wx.StaticText( self, wx.ID_ANY, u"Diver's Pay\n(Grams)", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText48.Wrap( -1 )
+		self.diving_fgSizer.Add( self.m_staticText48, 0, wx.ALL, 5 )
+		
+		self.m_staticText80 = wx.StaticText( self, wx.ID_ANY, u"Estimated Value\n(US $)", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText80.Wrap( -1 )
+		self.diving_fgSizer.Add( self.m_staticText80, 0, wx.ALL, 5 )
+		
+		self.bSizer.Add( self.diving_fgSizer, 0, 0, 5 )
+		
+		self.m_staticline15 = wx.StaticLine( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
+		self.bSizer.Add( self.m_staticline15, 0, wx.EXPAND |wx.ALL, 5 )
+		
+		self.m_staticText611 = wx.StaticText( self, wx.ID_ANY, u"Tending", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText611.Wrap( -1 )
+		self.m_staticText611.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), 70, 90, 92, False, wx.EmptyString ) )
+		
+		self.bSizer.Add( self.m_staticText611, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
+		
+		self.tending_fgSizer = wx.FlexGridSizer( 99, 4, 0, 0 )
+		self.tending_fgSizer.SetFlexibleDirection( wx.BOTH )
+		self.tending_fgSizer.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
+		
+		self.m_staticText451 = wx.StaticText( self, wx.ID_ANY, u"Tender\nName", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText451.Wrap( -1 )
+		self.tending_fgSizer.Add( self.m_staticText451, 0, wx.ALL, 5 )
+		
+		self.m_staticText461 = wx.StaticText( self, wx.ID_ANY, u"Tending\nHours", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText461.Wrap( -1 )
+		self.tending_fgSizer.Add( self.m_staticText461, 0, wx.ALL, 5 )
+		
+		self.m_staticText471 = wx.StaticText( self, wx.ID_ANY, u"Pay Rate\n($/hr)", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText471.Wrap( -1 )
+		self.tending_fgSizer.Add( self.m_staticText471, 0, wx.ALL, 5 )
+		
+		self.m_staticText481 = wx.StaticText( self, wx.ID_ANY, u"Tender's Pay\n($)", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText481.Wrap( -1 )
+		self.tending_fgSizer.Add( self.m_staticText481, 0, wx.ALL, 5 )
+		
+		self.bSizer.Add( self.tending_fgSizer, 0, 0, 5 )
+		
+		self.m_staticline16 = wx.StaticLine( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
+		self.bSizer.Add( self.m_staticline16, 0, wx.EXPAND |wx.ALL, 5 )
+		
+		fgSizer17 = wx.FlexGridSizer( 2, 2, 0, 0 )
+		fgSizer17.SetFlexibleDirection( wx.BOTH )
+		fgSizer17.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
+		
+		self.save_button = wx.Button( self, wx.ID_ANY, u"Save", wx.DefaultPosition, wx.DefaultSize, 0 )
+		fgSizer17.Add( self.save_button, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
+		
+		self.cancel_button = wx.Button( self, wx.ID_ANY, u"Close", wx.DefaultPosition, wx.DefaultSize, 0 )
+		fgSizer17.Add( self.cancel_button, 0, wx.ALL, 5 )
+		
+		self.bSizer.Add( fgSizer17, 0, wx.ALIGN_CENTER_HORIZONTAL, 5 )
+		
+		self.SetSizer( self.bSizer )
+		self.Layout()
+		self.bSizer.Fit( self )
+		
+		self.Centre( wx.BOTH )
+		
+		# Connect Events
+		self.Bind( wx.EVT_CLOSE, self._evtClose )
+		self.Bind( wx.EVT_INIT_DIALOG, self._evtInit )
+		self.totalGrams_textCtrl.Bind( wx.EVT_TEXT, self._evtTotalGramsChange )
+		self.londonSpot_textCtrl.Bind( wx.EVT_TEXT, self._evtLondonSpotChange )
+		self.percentLoss_textCtrl.Bind( wx.EVT_TEXT, self._evtPctLossChange )
+		self.save_button.Bind( wx.EVT_BUTTON, self._evtSave )
+		self.cancel_button.Bind( wx.EVT_BUTTON, self._evtClose )
+	
+	def __del__( self ):
+		pass
+	
+	
+	# Virtual event handlers, overide them in your derived class
+	def _evtClose( self, event ):
+		event.Skip()
+	
+	def _evtInit( self, event ):
+		event.Skip()
+	
+	def _evtTotalGramsChange( self, event ):
+		event.Skip()
+	
+	def _evtLondonSpotChange( self, event ):
+		event.Skip()
+	
+	def _evtPctLossChange( self, event ):
+		event.Skip()
+	
+	def _evtSave( self, event ):
+		event.Skip()
+	
 	
 

@@ -69,7 +69,6 @@ class DataStore:
         #print self.curs.fetchall()
         lst = []
         for each in self.curs.fetchall():
-            print str(each)
             lst.append(str(each[0]))
         if lst.__len__() is 0:
             lst.append('1')
@@ -101,15 +100,60 @@ class DataStore:
         return strlst
         
     def GetDiverList(self, cleanupNumber=1):
-        #gets list of divers in dive data not personnel
-        lst = self.GetCleanupSQLData(cleanupNumber)
-        uniquedivers = []
-        for row in lst:
-            try:
-                uniquedivers.index(row[3])
-            except ValueError:
-                uniquedivers.append(row[3])
-        return uniquedivers
+        t = (cleanupNumber,)
+        self.curs.execute('select distinct diverName from dives where cleanupNumber=?', t)
+        lst = []
+        for each in self.curs.fetchall():
+            lst.append( each[0] )
+        return lst
+    
+    def GetTenderList(self, cleanupNumber=1):
+        t = (cleanupNumber,)
+        self.curs.execute('select distinct tenderName from dives where cleanupNumber=?', t)
+        lst = []
+        for each in self.curs.fetchall():
+            lst.append( each[0] )
+        return lst
+    
+    def GetTendingHours(self, cleanupNumber, tenderName):
+        t = (cleanupNumber, tenderName)
+        self.curs.execute('select start, stop from dives where cleanupNumber=? and tenderName=?', t)
+        seconds = 0
+        for startstop in self.curs.fetchall():
+            start = time.mktime( time.strptime( startstop[0] +' 1970', "%I:%M %p %Y" ) )
+            stop = time.mktime( time.strptime( startstop[1] +' 1970', "%I:%M %p %Y" ) )
+            seconds += stop - start
+        tending = seconds / 60 / 60
+        
+        t = (cleanupNumber, tenderName)
+        self.curs.execute('select start, stop from dives where cleanupNumber=? and diverName=?', t)
+        seconds = 0
+        for startstop in self.curs.fetchall():
+            start = time.mktime( time.strptime( startstop[0] +' 1970', "%I:%M %p %Y" ) )
+            stop = time.mktime( time.strptime( startstop[1] +' 1970', "%I:%M %p %Y" ) )
+            seconds += stop - start
+        diving = seconds / 60 / 60
+        
+        result = tending - diving
+        
+        return round( result, 2 )
+    
+    def GetTenderRate(self, tenderName):
+        defaultRate = 20
+        self.curs.execute('select tendrate from crew where name=?', (tenderName,) )
+        rate = self.curs.fetchone()
+        if rate is not None:
+            return int(rate[0])
+        else:
+            return defaultRate
+    
+    def GetDiverRates(self, diverlist):
+        lst = []
+        for each in diverlist:
+            self.curs.execute('select diverate from crew where name=?', (each,) )
+            lst.append( (each,self.curs.fetchone()[0]) )
+        directory = dict( lst )
+        return directory
     
     def GetCrewList(self):
         self.curs.execute('select * from crew')
@@ -122,7 +166,7 @@ class DataStore:
         for each in divers:
             lst.append(each[0])
         return lst
-    
+        
     def GetBasicTenderList(self):
         self.curs.execute('select name from crew where duty = \'Diver and Tender\'')
         divers = self.curs.fetchall()
@@ -159,6 +203,33 @@ class DataStore:
         self.curs.execute("""insert into settings values (?,?)""",t)
         self.conn.commit()
         
+    def SaveReportTotals(self, cleanupNumber, grams, spot, loss):
+        #remove any old report first
+        t = ( str(cleanupNumber), )
+        self.curs.execute( """delete from cleanups where number=?""", t )
+        self.curs.execute( """delete from cleanupsub where number=?""", t )
+        
+        #save new report
+        t = ( int(cleanupNumber), str(grams), str(spot), str(loss) )
+        self.curs.execute("""insert into cleanups values (?,?,?,?)""",t)
+        self.conn.commit()
+        
+    def GetReportTotals(self, cleanupNumber):
+        t = ( str(cleanupNumber) )
+        self.curs.execute( """select * from cleanups where number=?""", t )
+        return self.curs.fetchone()
+    
+    def SaveReportDiverDetails(self, cleanupNumber, name, rate):
+        t = ( int(cleanupNumber), str(name), str(rate))
+        self.curs.execute("""insert into cleanupsub values (?,?,?)""",t)
+        self.conn.commit()
+        
+    def GetReportDiverDetails(self, cleanupNumber):
+        """returns a dictionary of divers and rates"""
+        t = ( int(cleanupNumber), )
+        self.curs.execute( """select name, percent from cleanupsub where number=?""",t )
+        return dict( self.curs.fetchall() )
+        
     def DropCrewData(self):
         self.curs.execute('delete from crew')
         self.conn.commit()
@@ -183,7 +254,10 @@ class DataStore:
                 start = time.mktime(time.strptime(row[4] +' 1970', "%I:%M %p %Y"))
                 stop = time.mktime(time.strptime(row[5] +' 1970', "%I:%M %p %Y"))
                 seconds += stop - start
+                if seconds < 0:
+                    seconds += 86400 #add 24hours if dive was overnight
                 divestr += '\n%s to %s' %(row[4], row[5])
+                divestr += '\nTending: %s' %(row[10])
                 first = False
         if divestr == '':
             divestr = '\n**No Dives**'   
@@ -207,6 +281,7 @@ class DataStore:
         diverlist = []
         for date in self.GetDateList(lst):
             row = []
+            ##add date
             row.append(date)
             diverlist = self.GetDiverList(cleanupNumber)
             for diver in diverlist:
@@ -217,6 +292,8 @@ class DataStore:
             for dive in row[1:row.__len__()]:
                 seconds += 3600 * int(dive[0:dive.index('hrs')])
                 seconds += 60 * int(dive[dive.index(' ')+1:dive.index('min')])
+                if seconds < 0:
+                    seconds += 86400 #add 24hours if dive was overnight
             row.append(self.SecondsToHMString(seconds)) 
             table.append(row)
         
@@ -242,6 +319,31 @@ class DataStore:
         row.append(grandT)
         table.append(row)       
         return table
+    
+    def GetTotalHours(self, cleanupNumber):
+        data = self.GetDataTable(cleanupNumber)
+        hmstr = data[-1][-1]
+        hrs = hmstr[0:hmstr.index('hrs' )]
+        min = hmstr[hmstr.index(' '):hmstr.index('min')].strip()
+        
+        result = float(hrs)+float(min)/60
+        return  str( round( result, 2 ) )
+    
+    def GetCleanupTotals(self, cleanupNumber):
+        diverlst = self.GetDiverList(cleanupNumber)
+        totals = self.GetDataTable(cleanupNumber)[-1]
+        lst = []
+        i=0 
+        for diver in diverlst:
+            i += 1
+            hmstr = totals[i]
+            hrs = hmstr[0:hmstr.index('hrs' )]
+            min = hmstr[hmstr.index(' '):hmstr.index('min')].strip()
+            result = float(hrs)+float(min)/60
+            hmstr = str( round( result, 2 ) )
+            lst.append( (diver, hmstr) )
+        directory = dict( lst )
+        return directory
     
     def AppendDive(self, cleanup, date, diver, start, stop, lat, long, bearing, notes, tender):
         print 'sql inserting record into dives'
@@ -291,7 +393,8 @@ class DataStore:
 if __name__=='__main__':
     DiveRTdbFile = 'C:\ProgramData\DiveRT\DiveRT.db'
     ds = DataStore(DiveRTdbFile)
-    print ds.GetBasicCleanupList()
-
+    
+    print ds.GetTenderRate('Unknown')
+    
     ds.Close()
         

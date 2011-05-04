@@ -2,10 +2,10 @@
 #-*- coding: utf-8 -*-
 # Copyright (C) 2010 by Will Kamp <manimaul!gmail.com>
 
-import Grid, time, GUI, Sql, os, wx.aui, GPSCom, wx.grid as gridlib
-from re import sub
+import Grid, time, GUI, Sql, os, wx.aui, GPSCom, re 
+import wx.grid as gridlib, wx.lib.scrolledpanel as scrolled
 
-class ConfirmDlg(GUI.ConfirmDlg): #dialog shown before dive session is deleted
+class ConfirmDlg(GUI.ConfirmDlg): #POPUP WINDOW
     def _evtYes(self, evt):
         sel = frame.listpanel.times_listBox.GetStringSelection()
         if sel.__len__() == 8: #only has start time... dive needs to be stopped
@@ -30,11 +30,11 @@ class ConfirmDlg(GUI.ConfirmDlg): #dialog shown before dive session is deleted
     def _evtCancel(self, evt):
         self.Destroy()
 
-class EditDlg(GUI.EditDlg):
+class EditDlg(GUI.EditDlg): #POPUP WINDOW
     def _evtHr(self, evt):
         ctrl = evt.GetEventObject()
         val = str(ctrl.GetValue())
-        newval = sub(r'\D+', '', val) #remove any non digits
+        newval = re.sub(r'\D+', '', val) #remove any non digits
         if newval != val:
             ctrl.SetValue(newval)
             ctrl.SetInsertionPointEnd()
@@ -45,7 +45,7 @@ class EditDlg(GUI.EditDlg):
     def _evtMinSec(self, evt):
         ctrl = evt.GetEventObject()
         val = str(ctrl.GetValue())
-        newval = sub(r'\D+', '', val) #remove any non digits
+        newval = re.sub(r'\D+', '', val) #remove any non digits
         if newval != val:
             ctrl.SetValue(newval)
             ctrl.SetInsertionPointEnd()
@@ -90,7 +90,7 @@ class EditDlg(GUI.EditDlg):
         apm = sel[6:8]
         self.sthr.SetValue(self.shour)
         self.stmin.SetValue(self.sminute)
-        self.stampm.SetStringSelection(apm)   
+        self.stampm.SetStringSelection(apm)
         if self.IsFullEdit: #full edits have information stored in the database
             self.ehour = sel[12:14]
             self.eminute = sel[15:17]
@@ -210,7 +210,418 @@ class EditDlg(GUI.EditDlg):
             frame.divepanel.SaveDive()
         self.Destroy()
 
-class DataPanel(GUI.DataPanel):
+class GPSSettings(GUI.GPSSettings): #POPUP WINDOW
+    def SetCtrlValues(self, evt):
+        ds = Sql.DataStore(DiveRTdbFile)
+        com, baud = ds.GetGPSSettings()
+        if com is not None and baud is not None:
+            com = int(com[3:com.__len__()])
+            #print com, baud
+            self.com_spinCtrl.SetValue(com)
+            self.baud_comboBox.SetStringSelection(str(baud))
+        ds.Close()
+    
+    def _evtCom(self, evt):
+        if hasattr(frame, 'gps'):
+            print 'closing previous gps connection'
+            frame.gps.close()
+        com = 'COM' + str(self.com_spinCtrl.GetValue())
+        baud = self.baud_comboBox.GetValue()
+        print 'connecting to:', com, baud
+        frame.gps = GPSCom.gps(com, baud)
+        
+        ds = Sql.DataStore(DiveRTdbFile)
+        ds.SetGPSSettings(com, baud)
+        ds.Close()
+    
+    def _evtDone(self, evt):
+        self.Destroy()
+
+class Report(GUI.RoundReport): #POPUP WINDOW
+    def _evtInit(self, evt):
+        ds = Sql.DataStore(DiveRTdbFile)
+        self.round_textCtrl.SetValue( str(CleanupRound) )
+        self.totaltime = ds.GetTotalHours(CleanupRound)
+        self.totalHours_textCtrl.SetValue(self.totaltime)
+        
+        diverlist = ds.GetDiverList(CleanupRound)
+        diverhours = ds.GetCleanupTotals(CleanupRound)
+        #get default diver percentages here... will be updated later if cleanup/round has saved data
+        diverrates = ds.GetDiverRates(diverlist)
+        
+        #now get saved diver percentages
+        savedDiverRates = ds.GetReportDiverDetails(CleanupRound)
+        comparelst = savedDiverRates.keys()
+        comparelst.reverse()
+        if comparelst == diverlist:
+            print 'retrieving saved diver rates'
+            diverrates = savedDiverRates
+        
+        self.diverRows = []
+        for diver in diverlist:
+            self.addDiverRow(diver, diverhours[diver], diverrates[diver])
+        
+        #get any saved data
+        data = ds.GetReportTotals(CleanupRound)
+        if data is not None:
+            self.totalGrams_textCtrl.SetValue(data[1])
+            self.londonSpot_textCtrl.SetValue(data[2])
+            self.percentLoss_textCtrl.SetValue(data[3])
+        
+        #self.SetEstTotal()
+        self.updateDiverRows()
+        
+        ##tender info
+        tenderlist = ds.GetTenderList(CleanupRound)
+        self.tenderRows = []
+        for name in tenderlist:
+            hrs = ds.GetTendingHours(CleanupRound, name)
+            rate = ds.GetTenderRate(name)
+            pay = round ( ( hrs * rate ), 2 )
+            self.addTenderRow(name, str(hrs), str(rate), "$" + str(pay))
+            
+        ds.Close()
+        
+        self.bSizer.Fit( self )
+        self.Layout()
+    
+    def addTenderRow(self, name, hours, rate, pay):
+        tendername_textCtrl = wx.TextCtrl( self, wx.ID_ANY, name, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        tendername_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.tending_fgSizer.Add( tendername_textCtrl, 0, wx.ALL, 5 )
+        
+        tenderhours_textCtrl = wx.TextCtrl( self, wx.ID_ANY, hours, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        tenderhours_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.tending_fgSizer.Add( tenderhours_textCtrl, 0, wx.ALL, 5 )
+        
+        tenderrate_textCtrl = wx.TextCtrl( self, wx.ID_ANY, rate, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        tenderrate_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.tending_fgSizer.Add( tenderrate_textCtrl, 0, wx.ALL, 5 )
+        
+        tenderpay_textCtrl = wx.TextCtrl( self, wx.ID_ANY, pay, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        tenderpay_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.tending_fgSizer.Add( tenderpay_textCtrl, 0, wx.ALL, 5 )
+        
+        tenderrate_textCtrl.Bind( wx.EVT_TEXT, lambda evt, h=tenderhours_textCtrl, r=tenderrate_textCtrl, p=tenderpay_textCtrl : self._evtTenderRateSet(h, r, p, evt) )
+        
+        self.tenderRows.append( (tenderhours_textCtrl, tenderrate_textCtrl, tenderpay_textCtrl) )
+        
+    def _evtTenderRateSet(self, tenderhours_textCtrl, tenderrate_textCtrl, tenderpay_textCtrl, evt=None):
+        val = tenderrate_textCtrl.GetValue()
+        newval = self.floatstr(val)
+        if newval != val:
+            tenderrate_textCtrl.SetValue(newval)
+            tenderrate_textCtrl.SetInsertionPointEnd()
+        if newval == "":
+            newval = 0.0
+        hrs = float( tenderhours_textCtrl.GetValue() )
+        r = tenderrate_textCtrl.GetValue()
+        if r == "":
+            rate = 0
+        else:
+            rate = float( r )
+        pay = round ( (hrs * rate), 2 )
+        tenderpay_textCtrl.SetValue( "$" + str(pay) )
+            
+    def updateDiverRows(self):
+        for row in self.diverRows:
+            self._evtDiverPercentSet(row[0], row[1], row[2], row[3] )
+            
+    def addDiverRow(self, name, hours, percent):
+        divername_textCtrl = wx.TextCtrl( self, wx.ID_ANY, name, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        divername_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( divername_textCtrl, 0, wx.ALL, 5 )
+        
+        diverhours_textCtrl = wx.TextCtrl( self, wx.ID_ANY, hours, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diverhours_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( diverhours_textCtrl, 0, wx.ALL, 5 )
+        
+        diverperct_textCtrl = wx.TextCtrl( self, wx.ID_ANY, percent, wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.diving_fgSizer.Add( diverperct_textCtrl, 0, wx.ALL, 5 )
+        
+        diverpay_textCtrl = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diverpay_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( diverpay_textCtrl, 0, wx.ALL, 5 )
+        
+        payvalue_textCtrl = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        payvalue_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( payvalue_textCtrl, 0, wx.ALL, 5)
+        
+        diverperct_textCtrl.Bind( wx.EVT_TEXT, lambda evt, h=diverhours_textCtrl, p=diverperct_textCtrl, g=diverpay_textCtrl, e=payvalue_textCtrl, : self._evtDiverPercentSet(h, p, g, e, evt))
+        
+        self.diverRows.append( (diverhours_textCtrl, diverperct_textCtrl, diverpay_textCtrl, payvalue_textCtrl) )
+        
+    def _evtDiverPercentSet(self, diverhours_textCtrl, diverperct_textCtrl, diverpay_textCtrl, payvalue_textCtrl, evt=None ):
+        val = diverperct_textCtrl.GetValue()
+        newval = self.floatstr(val)
+        if newval != val:
+            diverperct_textCtrl.SetValue(newval)
+            diverperct_textCtrl.SetInsertionPointEnd()
+        if newval == "":
+            newval = 0.0
+        
+        t = self.totalGrams_textCtrl.GetValue().strip()
+        if t == "":
+            tgrams = 0.0
+        else:
+            tgrams = float ( t )
+        
+        t = self.totalHours_textCtrl.GetValue()
+        if t == "":
+            thrs = 0.0
+        else:
+            thrs = float( t )
+            
+        hrs = float( diverhours_textCtrl.GetValue() )
+        pct = float( newval ) / 100.0
+        if thrs != 0:
+            grams = ( hrs / thrs ) * tgrams * pct
+            diverpay_textCtrl.SetValue( str(round(grams, 1)) )
+            payvalue_textCtrl.SetValue ( self.grams2EstDollars(grams) )
+               
+    def SetEstTotal(self):
+        grams = self.totalGrams_textCtrl.GetValue().strip()
+        if grams == '':
+            grams = 0
+        else:
+            grams = float( grams )
+        dollars = self.grams2EstDollars(grams)
+        self.estTotal_textCtrl.SetValue(dollars)
+        
+    def grams2EstDollars(self, grams):
+        percentLoss = self.percentLoss_textCtrl.GetValue()
+        if percentLoss == '':
+            pct = 0
+        else:
+            pct = float( percentLoss ) / 100.0
+            
+        londonSpot = self.londonSpot_textCtrl.GetValue()
+        if londonSpot == '':
+            spot = 0
+        else:
+            spot = float( londonSpot )
+            
+        toz = self.grams2TroyOz(grams)
+            
+        return '$' + '{:20,.2f}'.format( round( toz*pct*spot, 2) ).strip()
+    
+    def grams2TroyOz(self, grams):
+        gramsPerToz = 31.1034768
+        return grams / gramsPerToz
+        
+    def floatstr(self, somestring):
+        mystr = ''
+        decimal = False
+        for each in somestring:
+            srch = re.search(r'\d', each)
+            if srch is not None:
+                mystr += srch.group(0)
+            srch = re.search(r'\.', each)
+            if srch is not None and decimal is False:
+                mystr += srch.group(0)
+                decimal = True
+        return mystr
+        
+    def _evtTotalGramsChange(self, evt):
+        #only allow numbers and  one decimal
+        value = self.totalGrams_textCtrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            self.totalGrams_textCtrl.SetValue(newval)
+            self.totalGrams_textCtrl.SetInsertionPointEnd()
+        #recalculate Estimated Total Value
+        self.SetEstTotal()
+        #recalculate each divers pay
+        self.updateDiverRows()
+    
+    def _evtPctLossChange(self, evt):
+        #only allow numbers and  one decimal
+        value = self.percentLoss_textCtrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            self.percentLoss_textCtrl.SetValue(newval)
+            self.percentLoss_textCtrl.SetInsertionPointEnd()
+        if newval != '':
+            if float(newval) > 100.0:
+                self.percentLoss_textCtrl.SetValue('100')
+                self.percentLoss_textCtrl.SetInsertionPointEnd()
+        #recalculate Estimated Total Value
+        self.SetEstTotal()
+        #recalculate each divers pay
+        self.updateDiverRows()
+        
+    def _evtLondonSpotChange(self, evt):
+        #only allow numbers and  one decimal
+        value = self.londonSpot_textCtrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            self.londonSpot_textCtrl.SetValue(newval)
+            self.londonSpot_textCtrl.SetInsertionPointEnd()
+        #recalculate Estimated Total Value
+        self.SetEstTotal()
+        #recalculate each divers pay
+        self.updateDiverRows()
+        
+    def _evtSave(self, evt):
+        ds = Sql.DataStore(DiveRTdbFile)
+        grams = self.totalGrams_textCtrl.GetValue()
+        spot = self.londonSpot_textCtrl.GetValue()
+        loss = self.percentLoss_textCtrl.GetValue()
+        ds.SaveReportTotals(CleanupRound, grams, spot, loss)
+        
+        i=0
+        diverlist = ds.GetDiverList(CleanupRound)
+        for row in self.diverRows:
+            name = diverlist[i]
+            rate = self.diverRows[i][1].GetValue()
+            ds.SaveReportDiverDetails(CleanupRound, name, rate)
+            i+=1
+            
+        ds.Close()
+        self.Destroy()
+        
+    def _evtClose(self, evt):
+        self.Destroy()
+
+class CrewManager(wx.Dialog): #POPUP WINDOW   
+    def __init__( self, parent ):
+        wx.Dialog.__init__ ( self, parent, id = wx.ID_ANY, title = u"Crew Manager", pos = wx.DefaultPosition, size = wx.DefaultSize, style = wx.DEFAULT_DIALOG_STYLE )
+        
+        self.SetSizeHintsSz( wx.DefaultSize, wx.DefaultSize )
+        
+        self.bxSizer1 = wx.BoxSizer( wx.VERTICAL)
+        self.bxSizer2 = wx.BoxSizer( wx.VERTICAL )
+        self.fgSizer = wx.FlexGridSizer( 99, 5, 0, 0 )
+        self.fgSizer.SetFlexibleDirection( wx.BOTH )
+        self.fgSizer.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
+        
+        self.rowNumber = 0
+        self.rowStack = []
+        
+        self.bxSizer1.Add( self.bxSizer2, 1, wx.EXPAND, 5)
+        self.bxSizer2.Add( self.fgSizer, 1, wx.EXPAND, 5 )
+        
+        self.addStaticControls()
+
+        datastore = Sql.DataStore(DiveRTdbFile)
+        crewlist = datastore.GetCrewList()
+        for each in crewlist:
+            self.addRow(each[1], each[2], int(each[3]), int(each[4]))
+        #print crewlist
+        datastore.Close()
+        self.addRow()
+        
+        self.Centre( wx.BOTH )
+        
+    def addStaticControls(self):
+        name_staticText = wx.StaticText( self, wx.ID_ANY, u"Name", wx.DefaultPosition, wx.DefaultSize, 0 )
+        name_staticText.Wrap( -1 )
+        self.fgSizer.Add( name_staticText, 0, wx.ALL, 5 )
+        
+        duty_staticText = wx.StaticText( self, wx.ID_ANY, u"Duty", wx.DefaultPosition, wx.DefaultSize, 0 )
+        duty_staticText.Wrap( -1 )
+        self.fgSizer.Add( duty_staticText, 0, wx.ALL, 5 )
+        
+        diveRate_staticText = wx.StaticText( self, wx.ID_ANY, u"Dive Rate  (% of time)", wx.DefaultPosition, wx.DefaultSize, 0 )
+        diveRate_staticText.Wrap( -1 )
+        self.fgSizer.Add( diveRate_staticText, 0, wx.ALL, 5 )
+        
+        tenderRate_staticText = wx.StaticText( self, wx.ID_ANY, u"Tender Rate ($/hr)", wx.DefaultPosition, wx.DefaultSize, 0 )
+        tenderRate_staticText.Wrap( -1 )
+        self.fgSizer.Add( tenderRate_staticText, 0, wx.ALL, 5 )
+        
+        self.fgSizer.AddSpacer( ( 0, 0), 1, wx.EXPAND, 5 )
+        
+        self.save_button = wx.Button( self, wx.ID_ANY, u"Save", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.bxSizer1.Add( self.save_button, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
+        
+        self.save_button.Bind(wx.EVT_BUTTON, self._evtSave)
+        self.Bind(wx.EVT_CLOSE, self._evtClose)
+        
+    def addRow(self, Name="", Duty="Diver and Tender", DiveRate=50, TendRate=20):
+        #print 'adding row#', self.rowNumber
+        name_textCtrl = wx.TextCtrl( self, wx.ID_ANY, Name, wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.fgSizer.Add( name_textCtrl, 0, wx.ALL, 5 )
+        
+        duty_choiceChoices = [ u"Diver and Tender", u"Tender" ]
+        duty_choice = wx.Choice( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, duty_choiceChoices, 0 )
+        duty_choice.SetStringSelection(Duty)
+        self.fgSizer.Add( duty_choice, 0, wx.ALL, 5 )
+        
+        diveRate_spinCtrl = wx.SpinCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 25, 100, 50 )
+        diveRate_spinCtrl.SetValue(DiveRate)
+        self.fgSizer.Add( diveRate_spinCtrl, 0, wx.ALL, 5 )
+        
+        tenderRate_spinCtrl = wx.SpinCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 10, 40, 20 )
+        tenderRate_spinCtrl.SetValue(TendRate)
+        self.fgSizer.Add( tenderRate_spinCtrl, 0, wx.ALL, 5 )
+        
+        delete_button = wx.Button( self, wx.ID_ANY, u"Delete", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.fgSizer.Add( delete_button, 0, wx.ALL, 5 )
+        
+        self.SetSizer( self.bxSizer1)
+        self.Layout()
+        self.bxSizer1.Fit( self )
+        
+        self.rowStack.append([name_textCtrl, duty_choice, diveRate_spinCtrl, tenderRate_spinCtrl, delete_button])
+        name_textCtrl.Bind( wx.EVT_TEXT, lambda evt, rownum=self.rowNumber: self._evtNameTxt(evt, rownum))
+        duty_choice.Bind( wx.EVT_CHOICE, lambda evt, rownum=self.rowNumber: self._evtDuty(evt, rownum))
+        delete_button.Bind( wx.EVT_BUTTON, lambda evt, rownum=self.rowNumber: self._evtDelete(evt, rownum))
+        delete_button.Disable()
+        self.rowStack[self.rowNumber-1][4].Enable()
+        self._evtDuty(None, self.rowNumber)
+        self.rowNumber += 1
+        
+    def deleteRow(self, rownum):
+        print 'deleting row: ', rownum
+        listofdestroy = self.rowStack[rownum]
+        for each in listofdestroy:
+            each.Destroy()
+            
+        self.rowStack.pop(rownum)
+        self.rowStack.insert(rownum, None)
+        
+        self.SetSizer( self.bxSizer1)
+        self.Layout()
+        self.bxSizer1.Fit( self )
+    
+    def _evtDuty(self, evt, rownum):
+        rowobjlst = self.rowStack[rownum]
+        if rowobjlst[1].GetStringSelection() == "Diver and Tender":
+            rowobjlst[2].Enable() #diveRate_spinCtrl.Enable()
+        else:
+            rowobjlst[2].Disable()
+    
+    def _evtNameTxt(self, evt, rownum):
+        #print 'typing in: ', rownum
+        if rownum == self.rowNumber - 1:
+            self.addRow()
+            
+    def _evtDelete(self, evt, rownum):
+        self.deleteRow(rownum)
+        
+    def _evtSave(self, evt):
+        datastore = Sql.DataStore(DiveRTdbFile)
+        datastore.DropCrewData()
+        for each in self.rowStack[0:-1]:
+            if each is not None:
+                #print each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), each[3].GetValue()
+                datastore.AddCrew(each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), each[3].GetValue())
+        datastore.Close()
+        frame.divepanel.updateDiverTenderChoice()
+        self.Destroy()
+    
+    def _evtClose(self, evt):
+        self.Destroy()
+
+class About(GUI.About): #POPUP WINDOW
+    def _evtOK(self, evt):
+        global aboutok
+        aboutok = True
+        frame.Show()
+        self.Destroy()
+
+class DataPanel(GUI.DataPanel): #AUI PANEL
     def init(self):
         self.Ticker()
         self.timer = wx.Timer(self)
@@ -241,7 +652,7 @@ class DataPanel(GUI.DataPanel):
                 self.bearing_staticText.SetLabel(unicode(bearing))
         frame.divepanel.CalcTimeUW()
 
-class DivePanel(GUI.DivePanel):
+class DivePanel(GUI.DivePanel): #AUI PANEL frame.divepanel
     def init(self):
         self.lat = '00.0000000'
         self.long = '000.0000000'
@@ -414,24 +825,211 @@ class DivePanel(GUI.DivePanel):
         frame.listpanel.diveidlst.append(lastid) #track IDs of dives in list so records can be deleted
         datastore.Close()
         frame.grid._evtRefresh(None)
-        #print frame.listpanel.diveidlst
+        #print frame.listpanel.diveidls
 
-class GridPanel(GUI.GridPanel):
+class CustomDataTable(gridlib.PyGridTableBase): #BEGIN GRID STUFF
+    def __init__(self, cleanupNumber, dbfile):
+        gridlib.PyGridTableBase.__init__(self)
+        self.DataStore = Sql.DataStore(dbfile)
+        self.GetData(cleanupNumber)
+        
+        self.dataTypes = [gridlib.GRID_VALUE_DATETIME,
+                          gridlib.GRID_VALUE_STRING,
+                          gridlib.GRID_VALUE_STRING,
+                          gridlib.GRID_VALUE_STRING,
+                          gridlib.GRID_VALUE_STRING
+                          ]
+        
+        self.DataStore.Close()
+        
+    def GetData(self, cleanupNumber):
+        #columns
+        self.colLabels = ['Dive Date']
+        for diver in self.DataStore.GetDiverList(cleanupNumber):
+            self.colLabels.append(diver)
+        self.colLabels.append('Dives Totals')  
+        #rows     
+        self.data = self.DataStore.GetDataTable(cleanupNumber)
+        
+    def GetNumberRows(self):
+        return len(self.data)
+
+    def GetNumberCols(self):
+        return len(self.data[0])
+
+    def IsEmptyCell(self, row, col):
+        try:
+            return not self.data[row][col]
+        except IndexError:
+            return True
+
+    def GetValue(self, row, col): # Get/Set values in the table.
+        try:
+            return self.data[row][col]
+        except IndexError:
+            return ''
+
+    def GetColLabelValue(self, col):
+        return self.colLabels[col]
+
+class CustTableGrid(gridlib.Grid): #GRID STUFF
+    def __init__(self, parent, dbfile, cleanup=0):
+        gridlib.Grid.__init__(self, parent, -1)
+        
+        if cleanup == 0:
+            ds = Sql.DataStore(dbfile)
+            cleanup = ds.GetLastCleanupRound()
+            ds.Close()
+        print 'grid using cleanup #', cleanup
+        table = CustomDataTable(cleanup, dbfile)
+
+        # The second parameter means that the grid is to take ownership of the
+        # table and will destroy it when done.  Otherwise you would need to keep
+        # a reference to it and call it's Destroy method later.
+        self.SetTable(table, True)
+
+        self.SetRowLabelSize(0) #hides row labels row
+        #self.SetMargins(0,0)
+        self.EnableEditing(False)
+        self.EnableDragColMove(False)
+        self.EnableDragColSize(False)
+        self.EnableDragRowSize(False)
+        self.EnableDragGridSize(False)
+        self.FormatCells()
+        
+        self.AutoSizeColumns(True)
+        self.AutoSizeRows(True)
+        self.Bind(gridlib.EVT_GRID_CELL_LEFT_CLICK, self.onCellSelect)
+
+    def onCellSelect(self, event):
+        self.ClearSelection()
+        col = event.GetCol()
+        row = event.GetRow()
+        self.SetGridCursor(row, col)
+        day = self.GetCellValue(row, 0)
+        #print self.GetRowLabelValue(row)
+        name = self.GetColLabelValue(col)
+        if (name != "Dive Date") == (name != "Dives Totals") == (day != "Totals"):
+            print name, day
+            frame.divepanel.diver_choice.SetStringSelection(name)
+            
+            str_strptime = time.strptime(day, '%b %d %Y')
+            month = int(time.strftime('%m', str_strptime))
+            day = int(time.strftime('%d', str_strptime))
+            year = int(time.strftime('%Y', str_strptime))
+            wxdate = wx.DateTime()
+            wxdate.Set(day, month-1, year)
+            frame.divepanel.datePicker.SetValue( wxdate )
+            frame.divepanel._evtDiverChoice()
+        else:
+            frame.divepanel.datePicker.SetValue( wx.DateTime_Now() )
+            if (name != "Dive Date") == (name != "Dives Totals"):
+                frame.divepanel.diver_choice.SetStringSelection(name)
+            frame.divepanel._evtDiverChoice()
+            
+        
+    def FormatCells(self):
+        #cell formating
+        lastrow = self.GetNumberRows()-1
+        lastcol = self.GetNumberCols()-1
+        
+        #ALL / EVEN ROWS
+        attr = gridlib.GridCellAttr()
+        LIGHTGREY = wx.Colour(235,235,235)
+        attr.SetBackgroundColour(LIGHTGREY)
+        for rownum in range(lastrow):
+            if rownum%2 != 0:
+                self.SetRowAttr(rownum, attr)
+            
+        ##LAST ROW
+        DARKGREY = wx.Colour(117,117,117)
+        attr = gridlib.GridCellAttr()
+        attr.SetTextColour(wx.WHITE)
+        attr.SetFont(wx.Font(10, wx.SWISS, wx.NORMAL, wx.BOLD))
+        attr.SetBackgroundColour(DARKGREY)
+        self.SetRowAttr(lastrow, attr)
+        
+        #LAST CELL
+        DARKRED = wx.Colour(127,0,0)
+        self.SetCellTextColour(lastrow, lastcol, DARKRED)
+
+class GridGridPanel( scrolled.ScrolledPanel ): #GRID STUFF
+    def __init__( self, parent ):
+        scrolled.ScrolledPanel.__init__( self, parent, -1)
+        self.bSizer = wx.BoxSizer( wx.VERTICAL )
+        self.grid = CustTableGrid(self,  'C:\ProgramData\DiveRT\DiveRT.db')
+        self.bSizer.Add( self.grid, 0, wx.ALL, 5 )
+        self.SetSizer( self.bSizer )
+        self.SetAutoLayout(1)
+        self.SetupScrolling()
+        
+    def onWheel(self, event):
+        print 'wheel'
+
+class GridPanel ( wx.Panel ): #END GRID STUFF
+    def __init__( self, parent ):
+        wx.Panel.__init__( self, parent, -1)
+        
+        self.bSizer = wx.BoxSizer( wx.VERTICAL )
+        
+        self.m_staticText19 = wx.StaticText( self, wx.ID_ANY, u"Dive Table", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText19.Wrap( -1 )
+        self.m_staticText19.SetFont( wx.Font( 12, 70, 90, 92, False, wx.EmptyString ) )
+        
+        self.bSizer.Add( self.m_staticText19, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
+        
+        self.m_staticline36 = wx.StaticLine( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
+        self.bSizer.Add( self.m_staticline36, 0, wx.EXPAND |wx.ALL, 5 )
+        
+        fgSizer12 = wx.FlexGridSizer( 1, 4, 0, 0 )
+        fgSizer12.SetFlexibleDirection( wx.BOTH )
+        fgSizer12.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
+        
+        self.m_staticText39 = wx.StaticText( self, wx.ID_ANY, u"Cleanup / Round", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText39.Wrap( -1 )
+        fgSizer12.Add( self.m_staticText39, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
+        
+        cround_choiceChoices = []
+        self.cround_choice = wx.Choice( self, wx.ID_ANY, wx.DefaultPosition, wx.Size( 50,-1 ), cround_choiceChoices, 0 )
+        self.cround_choice.SetSelection( 0 )
+        fgSizer12.Add( self.cround_choice, 0, wx.ALL, 5 )
+        
+        self.newRound_button = wx.Button( self, wx.ID_ANY, u"Start New Round", wx.DefaultPosition, wx.DefaultSize, 0 )
+        fgSizer12.Add( self.newRound_button, 0, wx.ALL, 5 )
+        
+        self.report_button = wx.Button( self, wx.ID_ANY, u"View Round Report", wx.DefaultPosition, wx.DefaultSize, 0 )
+        fgSizer12.Add( self.report_button, 0, wx.ALL, 5 )
+        
+        self.bSizer.Add( fgSizer12, 0, 0, 5 )
+        
+        self.hline = wx.StaticLine( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
+        self.bSizer.Add( self.hline, 0, wx.EXPAND|wx.ALL, 5 )
+        self.grid = GridGridPanel( self )        
+        self.bSizer.Add( self.grid, 1, wx.EXPAND|wx.ALL, 5 )
+        self.SetSizer( self.bSizer )
+        self.SetAutoLayout(1)
+        
+        # Connect Events
+        self.cround_choice.Bind( wx.EVT_CHOICE, self._evtRoundChange )
+        self.newRound_button.Bind( wx.EVT_BUTTON, self._evtNewRound )
+        self.report_button.Bind( wx.EVT_BUTTON, self._evtReport )   
+    
     def _evtRefresh(self, evt=None):
-        self.grid.Table = Grid.CustomDataTable(CleanupRound, DiveRTdbFile)
-        self.grid.FormatCells()
-        self.grid.AutoSizeColumns(True)
-        self.grid.AutoSizeRows(True)
-        msg = gridlib.GridTableMessage(self.grid.Table, gridlib.GRIDTABLE_REQUEST_VIEW_GET_VALUES)
-        self.grid.Table.GetView().ProcessTableMessage(msg)
-        self.Layout()
+        self.grid.grid.Table = Grid.CustomDataTable(CleanupRound, DiveRTdbFile)
+        self.grid.grid.FormatCells()
+        self.grid.grid.AutoSizeColumns(True)
+        self.grid.grid.AutoSizeRows(True)
+        msg = gridlib.GridTableMessage(self.grid.grid.Table, gridlib.GRIDTABLE_REQUEST_VIEW_GET_VALUES)
+        self.grid.grid.Table.GetView().ProcessTableMessage(msg)
+        self.grid.SetSizer( self.grid.bSizer )
+        self.grid.Layout()
+        #self.grid.SetAutoLayout(1)
+        self.grid.SetupScrolling()
     
     def updateRoundChoices(self):
-        print 'updating round choices'
         datastore = Sql.DataStore(DiveRTdbFile)
         self.cround_choice.SetItems(datastore.GetBasicCleanupList())
         datastore.Close()
-        
         self.cround_choice.SetSelection(CleanupRound-1)
         
     def _evtRoundChange(self, evt=None):
@@ -451,7 +1049,11 @@ class GridPanel(GUI.GridPanel):
         self._evtRoundChange()
         ds.Close()
         
-class DetailPanel(GUI.DetailPanel):
+    def _evtReport(self, evt):
+        report = Report(None)
+        report.ShowModal()
+
+class DetailPanel(GUI.DetailPanel): #AUI PANEL
     def init(self):
         self.diveidlst = []
         
@@ -482,40 +1084,14 @@ class DetailPanel(GUI.DetailPanel):
             EditDialog.EnableFullEdit()
         EditDialog.EditFillValues()
         EditDialog.ShowModal()
-              
-class GPSSettings(GUI.GPSSettings):
-    def SetCtrlValues(self, evt):
-        ds = Sql.DataStore(DiveRTdbFile)
-        com, baud = ds.GetGPSSettings()
-        if com is not None and baud is not None:
-            com = int(com[3:com.__len__()])
-            print com, baud
-            self.com_spinCtrl.SetValue(com)
-            self.baud_comboBox.SetStringSelection(str(baud))
-        ds.Close()
-    
-    def _evtCom(self, evt):
-        if hasattr(frame, 'gps'):
-            print 'closing previous gps connection'
-            frame.gps.close()
-        com = 'COM' + str(self.com_spinCtrl.GetValue())
-        baud = self.baud_comboBox.GetValue()
-        print 'connecting to:', com, baud
-        frame.gps = GPSCom.gps(com, baud)
-        
-        ds = Sql.DataStore(DiveRTdbFile)
-        ds.SetGPSSettings(com, baud)
-        ds.Close()
-    
-    def _evtDone(self, evt):
-        self.Destroy()
 
-class MyFrame(wx.Frame):
+class AUIFrame(wx.Frame): #AUI FRAME
     def __init__(self, parent, id=-1, title='Dive Recovery Tracker',
-                 pos=wx.DefaultPosition, size=(1000, 700),
+                 pos=wx.DefaultPosition, size=(1300, 700),
                  style=wx.DEFAULT_FRAME_STYLE):
         wx.Frame.__init__(self, parent, id, title, pos, size, style)
         self._mgr = wx.aui.AuiManager(self)
+        self._mgr.SetFlags(wx.aui.AUI_MGR_DEFAULT|wx.aui.AUI_MGR_TRANSPARENT_DRAG)
         self.CreateMenu()
         self.grid = GridPanel(self) #create grid panel
         self.datapanel = DataPanel(self) #create data panel
@@ -525,6 +1101,10 @@ class MyFrame(wx.Frame):
         self.listpanel.init() 
         self.DefaultLayout()
         self.BindEvents()
+        self.Bind( wx.EVT_LEFT_DOWN, self._evtScrollWheel )
+        
+    def _evtScrollWheel( self, event):
+        print 'hi'
         
     def CreateMenu(self):
         self.MenuBar = wx.MenuBar( 0 )
@@ -539,7 +1119,10 @@ class MyFrame(wx.Frame):
         self.quit_menuItem = wx.MenuItem( self.file_menu, wx.ID_ANY, u"Quit", wx.EmptyString, wx.ITEM_NORMAL )
         self.file_menu.AppendItem( self.quit_menuItem )
         
-        self.MenuBar.Append( self.file_menu, u"Menu" ) 
+        self.about_menuItem = wx.MenuItem( self.file_menu, wx.ID_ANY, u"About", wx.EmptyString, wx.ITEM_NORMAL )
+        self.file_menu.AppendItem( self.about_menuItem )
+        
+        self.MenuBar.Append( self.file_menu, u"Menu" )
         self.SetMenuBar( self.MenuBar )        
                 
     def DefaultLayout(self):
@@ -549,7 +1132,7 @@ class MyFrame(wx.Frame):
                           Caption("Dive List Panel").
                           CloseButton(False).
                           MaximizeButton(False).
-                          Bottom().
+                          Right().
                           Name('divelist'))
         self.divelistPane = self._mgr.GetPane('divelist')
         
@@ -575,8 +1158,12 @@ class MyFrame(wx.Frame):
         self.divepanelPane = self._mgr.GetPane('divepanel')
         
         self._mgr.AddPane(self.grid, wx.CENTER)
+#        self._mgr.AddPane(self.grid, wx.aui.AuiPaneInfo().Layer(0).
+#                          MinSize(self.grid.GetBestSizeTuple()).
+#                          Caption("Grid").CloseButton(False).
+#                          MaximizeButton(False).
+#                          Name('gridpanel'))
 
-        
         self._mgr.Update()# tell the manager to 'commit' all the changes just made
     
     def BindEvents(self):
@@ -584,6 +1171,11 @@ class MyFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, self._evtManageCrew, id = self.managedivers_menuItem.GetId())
         self.Bind(wx.EVT_MENU, self._evtClose, id = self.quit_menuItem.GetId())
         self.Bind(wx.EVT_MENU, self._evtGPSSettings, id = self.gps_menuItem.GetId())
+        self.Bind(wx.EVT_MENU, self._evtShowAbout, id = self.about_menuItem.GetId())
+        
+    def _evtShowAbout(self, evt):
+        about = About(None)
+        about.ShowModal()
         
     def _evtGPSSettings(self, evt):
         gpswindow = GPSSettings(None)
@@ -602,163 +1194,37 @@ class MyFrame(wx.Frame):
         # delete the frame
         self.Destroy()
 
-class Rows:
-    def __init__(self):
-        self.rowNumber = 0
-        self.rowStack = []
-
-class CrewManager(wx.Dialog):
+def Main():
+    global DiveRTDir
+    global DiveRTdbFile
+    DiveRTDir = 'C:\ProgramData\DiveRT'
+    DiveRTdbFile = 'C:\ProgramData\DiveRT\DiveRT.db'
     
-    def __init__( self, parent ):
-        wx.Dialog.__init__ ( self, parent, id = wx.ID_ANY, title = u"Crew Manager", pos = wx.DefaultPosition, size = wx.DefaultSize, style = wx.DEFAULT_DIALOG_STYLE )
+    if not os.path.isdir(DiveRTDir):
+        print 'creating', DiveRTDir
+        os.mkdir(DiveRTDir)
         
-        self.SetSizeHintsSz( wx.DefaultSize, wx.DefaultSize )
-        
-        self.bxSizer1 = wx.BoxSizer( wx.VERTICAL)
-        self.bxSizer2 = wx.BoxSizer( wx.VERTICAL )
-        self.fgSizer = wx.FlexGridSizer( 99, 5, 0, 0 )
-        self.fgSizer.SetFlexibleDirection( wx.BOTH )
-        self.fgSizer.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
-        
-        self.rows = Rows()
-        
-        self.bxSizer1.Add( self.bxSizer2, 1, wx.EXPAND, 5)
-        self.bxSizer2.Add( self.fgSizer, 1, wx.EXPAND, 5 )
-        
-        self.addStaticControls()
-
-        datastore = Sql.DataStore(DiveRTdbFile)
-        crewlist = datastore.GetCrewList()
-        for each in crewlist:
-            self.addRow(each[1], each[2], int(each[3]), int(each[4]))
-        #print crewlist
-        datastore.Close()
-        self.addRow()
-        
-        self.Centre( wx.BOTH )
-        
-    def addStaticControls(self):
-        name_staticText = wx.StaticText( self, wx.ID_ANY, u"Name", wx.DefaultPosition, wx.DefaultSize, 0 )
-        name_staticText.Wrap( -1 )
-        self.fgSizer.Add( name_staticText, 0, wx.ALL, 5 )
-        
-        duty_staticText = wx.StaticText( self, wx.ID_ANY, u"Duty", wx.DefaultPosition, wx.DefaultSize, 0 )
-        duty_staticText.Wrap( -1 )
-        self.fgSizer.Add( duty_staticText, 0, wx.ALL, 5 )
-        
-        diveRate_staticText = wx.StaticText( self, wx.ID_ANY, u"Dive Rate  (% of time)", wx.DefaultPosition, wx.DefaultSize, 0 )
-        diveRate_staticText.Wrap( -1 )
-        self.fgSizer.Add( diveRate_staticText, 0, wx.ALL, 5 )
-        
-        tenderRate_staticText = wx.StaticText( self, wx.ID_ANY, u"Tender Rate ($/hr)", wx.DefaultPosition, wx.DefaultSize, 0 )
-        tenderRate_staticText.Wrap( -1 )
-        self.fgSizer.Add( tenderRate_staticText, 0, wx.ALL, 5 )
-        
-        self.fgSizer.AddSpacer( ( 0, 0), 1, wx.EXPAND, 5 )
-        
-        self.save_button = wx.Button( self, wx.ID_ANY, u"Save", wx.DefaultPosition, wx.DefaultSize, 0 )
-        self.bxSizer1.Add( self.save_button, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
-        
-        self.save_button.Bind(wx.EVT_BUTTON, self._evtSave)
-        self.Bind(wx.EVT_CLOSE, self._evtClose)
-        
-    def addRow(self, Name="", Duty="Diver and Tender", DiveRate=50, TendRate=20):
-        #print 'adding row#', self.rows.rowNumber
-        name_textCtrl = wx.TextCtrl( self, wx.ID_ANY, Name, wx.DefaultPosition, wx.DefaultSize, 0 )
-        self.fgSizer.Add( name_textCtrl, 0, wx.ALL, 5 )
-        
-        duty_choiceChoices = [ u"Diver and Tender", u"Tender" ]
-        duty_choice = wx.Choice( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, duty_choiceChoices, 0 )
-        duty_choice.SetStringSelection(Duty)
-        self.fgSizer.Add( duty_choice, 0, wx.ALL, 5 )
-        
-        diveRate_spinCtrl = wx.SpinCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 25, 100, 50 )
-        diveRate_spinCtrl.SetValue(DiveRate)
-        self.fgSizer.Add( diveRate_spinCtrl, 0, wx.ALL, 5 )
-        
-        tenderRate_spinCtrl = wx.SpinCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 10, 40, 20 )
-        tenderRate_spinCtrl.SetValue(TendRate)
-        self.fgSizer.Add( tenderRate_spinCtrl, 0, wx.ALL, 5 )
-        
-        delete_button = wx.Button( self, wx.ID_ANY, u"Delete", wx.DefaultPosition, wx.DefaultSize, 0 )
-        self.fgSizer.Add( delete_button, 0, wx.ALL, 5 )
-        
-        self.SetSizer( self.bxSizer1)
-        self.Layout()
-        self.bxSizer1.Fit( self )
-        
-        self.rows.rowStack.append([name_textCtrl, duty_choice, diveRate_spinCtrl, tenderRate_spinCtrl, delete_button])
-        name_textCtrl.Bind( wx.EVT_TEXT, lambda evt, rownum=self.rows.rowNumber: self._evtNameTxt(evt, rownum))
-        duty_choice.Bind( wx.EVT_CHOICE, lambda evt, rownum=self.rows.rowNumber: self._evtDuty(evt, rownum))
-        delete_button.Bind( wx.EVT_BUTTON, lambda evt, rownum=self.rows.rowNumber: self._evtDelete(evt, rownum))
-        delete_button.Disable()
-        self.rows.rowStack[self.rows.rowNumber-1][4].Enable()
-        self._evtDuty(None, self.rows.rowNumber)
-        self.rows.rowNumber += 1
-        
-    def deleteRow(self, rownum):
-        print 'deleting row: ', rownum
-        listofdestroy = self.rows.rowStack[rownum]
-        for each in listofdestroy:
-            each.Destroy()
-            
-        self.rows.rowStack.pop(rownum)
-        self.rows.rowStack.insert(rownum, None)
-        
-        self.SetSizer( self.bxSizer1)
-        self.Layout()
-        self.bxSizer1.Fit( self )
+    if not os.path.isfile(DiveRTdbFile):
+        print 'creating DiveRT.db'
+        Sql.CreateEmptyDiveDB(DiveRTdbFile)
     
-    def _evtDuty(self, evt, rownum):
-        rowobjlst = self.rows.rowStack[rownum]
-        if rowobjlst[1].GetStringSelection() == "Diver and Tender":
-            rowobjlst[2].Enable() #diveRate_spinCtrl.Enable()
-        else:
-            rowobjlst[2].Disable()
+    ds = Sql.DataStore(DiveRTdbFile)
+    global CleanupRound
+    CleanupRound = ds.GetLastCleanupRound()
+    print 'Setting CleanupRound', CleanupRound
+    ds.Close()
     
-    def _evtNameTxt(self, evt, rownum):
-        #print 'typing in: ', rownum
-        if rownum == self.rows.rowNumber - 1:
-            self.addRow()
-            
-    def _evtDelete(self, evt, rownum):
-        self.deleteRow(rownum)
-        
-    def _evtSave(self, evt):
-        datastore = Sql.DataStore(DiveRTdbFile)
-        datastore.DropCrewData()
-        for each in self.rows.rowStack[0:-1]:
-            if each is not None:
-                print each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), each[3].GetValue()
-                datastore.AddCrew(each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), each[3].GetValue())
-        datastore.Close()
-        frame.divepanel.updateDiverTenderChoice()
-        self.Destroy()
+    app = wx.App(redirect=False)
     
-    def _evtClose(self, evt):
-        self.Destroy()
-
-DiveRTDir = 'C:\ProgramData\DiveRT'
-DiveRTdbFile = 'C:\ProgramData\DiveRT\DiveRT.db'
-
-if not os.path.isdir(DiveRTDir):
-    print 'creating', DiveRTDir
-    os.mkdir(DiveRTDir)
+    aboutdlg = About(None)
+    aboutdlg.Show()
     
-if not os.path.isfile(DiveRTdbFile):
-    print 'creating DiveRT.db'
-    Sql.CreateEmptyDiveDB(DiveRTdbFile)
+    global frame
+    frame = AUIFrame(None)
+    frame.divepanel._evtDiverChoice() #force event to populate listbox if diver had dives on this date
+    frame.datapanel.init()
+    frame.grid.updateRoundChoices()
+    #frame.Show()
+    app.MainLoop()
 
-ds = Sql.DataStore(DiveRTdbFile)
-CleanupRound = ds.GetLastCleanupRound()
-print 'Setting CleanupRound', CleanupRound
-ds.Close()
-
-app = wx.App(redirect=False)
-frame = MyFrame(None)
-frame.divepanel._evtDiverChoice() #force event to populate listbox if diver had dives on this date
-frame.datapanel.init()
-frame.grid.updateRoundChoices()
-
-frame.Show()
-app.MainLoop()
+Main()

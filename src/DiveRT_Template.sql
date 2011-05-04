@@ -33,4 +33,21 @@ CREATE TABLE settings (
 );
 
 
+-- Table: cleanups
+CREATE TABLE cleanups ( 
+    number     INT,
+    grams      CHAR,
+    londonspot CHAR,
+    loss       CHAR 
+);
+
+
+-- Table: cleanupsub
+CREATE TABLE cleanupsub ( 
+    number  INT,
+    name    CHAR,
+    percent CHAR 
+);
+
+
 
