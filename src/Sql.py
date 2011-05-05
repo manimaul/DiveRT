@@ -150,11 +150,71 @@ class DataStore:
     def GetDiverRates(self, diverlist):
         lst = []
         for each in diverlist:
-            self.curs.execute('select diverate from crew where name=?', (each,) )
+            self.curs.execute( 'select diverate from crew where name=?', (each,) )
             lst.append( (each,self.curs.fetchone()[0]) )
         directory = dict( lst )
         return directory
     
+    def GetKMLData(self):
+        #[(round, ozperhr), [(date, name, hrs, color, bearing, icon, note, lat, long), ] ]
+        lst = []
+        
+        colors = ('ff0000', '00ff00', 'ffd300', '72f6ff', '837200', 'ff1ab8', '72607b', '00ffc1', 'f61160', '8ca77b', '005700', 'ffc183', '0000ff', '9ec1ff', '9e4f46') #0:14
+        i = 0
+        for number in self.GetBasicCleanupList(): #list of all rounds from dives
+            folder = ( number, self.GetOzPerHour(number))
+            #print folder
+            self.curs.execute('select * from dives where cleanupNumber=? and latitude!=? and longitude!=?', (number, '00.000000', '000.000000'))
+            fetch = self.curs.fetchall()
+            #print fetch
+            placemarks = []
+            if fetch is not None:
+                for each in fetch:
+                    date = each[2]
+                    name = each[3]
+                    seconds = time.mktime(time.strptime(each[4] +' 1970', "%I:%M %p %Y")) - time.mktime(time.strptime(each[5] +' 1970', "%I:%M %p %Y"))
+                    hrs = str( seconds / 60 / 60 )
+                    color = colors[i]
+                    lat = each[6]
+                    latitude = lat.split('*')[0]
+                    if lat.split('*')[1] == 'S':
+                        latitude = '-' + latitude
+                    lon = each[7]
+                    longitude = lon.split('*')[0]
+                    if lon.split('*')[1] == 'W':
+                        longitude = '-' + longitude
+                    bearing = each[8]
+                    if bearing == 'None':
+                        icon = 'circle'
+                        bearing = '0.0'
+                    else:
+                        icon = 'arrow'
+                        bearing = bearing.split('*')[0]
+                    note = each[9]
+                    placemarks.append( (date, name, hrs, color, bearing, icon, note, longitude, latitude) )
+            if i == 15:
+                i = 0
+            else:
+                i += 1
+            lst.append( (folder, placemarks) )
+        return lst
+            
+            
+    def GetOzPerHour(self, cleanupNumber):
+        self.curs.execute('select grams from cleanups where number=?', (cleanupNumber,) )
+        fetch = self.curs.fetchone()
+        if fetch is not None:
+            grams = float( fetch[0] )
+        else:
+            grams = 0.0
+        troyOz = grams / 31.1034768
+        hours = float( self.GetTotalHours(cleanupNumber) )
+        if hours == 0.0:
+            ozPerHr = '0.0'
+        else:
+            ozPerHr = str( round(troyOz / hours, 2) )
+        return ozPerHr
+        
     def GetCrewList(self):
         self.curs.execute('select * from crew')
         return self.curs.fetchall()
@@ -394,7 +454,8 @@ if __name__=='__main__':
     DiveRTdbFile = 'C:\ProgramData\DiveRT\DiveRT.db'
     ds = DataStore(DiveRTdbFile)
     
-    print ds.GetTenderRate('Unknown')
+    for each in ds.GetKMLData():
+        print each
     
     ds.Close()
         

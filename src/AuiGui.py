@@ -2,7 +2,7 @@
 #-*- coding: utf-8 -*-
 # Copyright (C) 2010 by Will Kamp <manimaul!gmail.com>
 
-import Grid, time, GUI, Sql, os, wx.aui, GPSCom, re 
+import Grid, time, GUI, Sql, os, wx.aui, GPSCom, re, shutil 
 import wx.grid as gridlib, wx.lib.scrolledpanel as scrolled
 
 class ConfirmDlg(GUI.ConfirmDlg): #POPUP WINDOW
@@ -1110,6 +1110,9 @@ class AUIFrame(wx.Frame): #AUI FRAME
         self.MenuBar = wx.MenuBar( 0 )
         self.file_menu = wx.Menu()
         
+        self.export_menuItem = wx.MenuItem( self.file_menu, wx.ID_ANY, u"Export Map", wx.EmptyString, wx.ITEM_NORMAL )
+        self.file_menu.AppendItem( self.export_menuItem )
+        
         self.managedivers_menuItem = wx.MenuItem( self.file_menu, wx.ID_ANY, u"Manage Divers && Tenders", wx.EmptyString, wx.ITEM_NORMAL )
         self.file_menu.AppendItem( self.managedivers_menuItem )
         
@@ -1123,7 +1126,7 @@ class AUIFrame(wx.Frame): #AUI FRAME
         self.file_menu.AppendItem( self.about_menuItem )
         
         self.MenuBar.Append( self.file_menu, u"Menu" )
-        self.SetMenuBar( self.MenuBar )        
+        self.SetMenuBar( self.MenuBar )
                 
     def DefaultLayout(self):
         # add the panes to the manager
@@ -1197,8 +1200,10 @@ class AUIFrame(wx.Frame): #AUI FRAME
 def Main():
     global DiveRTDir
     global DiveRTdbFile
-    DiveRTDir = 'C:\ProgramData\DiveRT'
-    DiveRTdbFile = 'C:\ProgramData\DiveRT\DiveRT.db'
+    global IconDir
+    DiveRTDir = 'C:\\ProgramData\\DiveRT'
+    IconDir = 'C:\\ProgramData\DiveRT\\icons'
+    DiveRTdbFile = 'C:\\ProgramData\\DiveRT\\DiveRT.db'
     
     if not os.path.isdir(DiveRTDir):
         print 'creating', DiveRTDir
@@ -1207,6 +1212,18 @@ def Main():
     if not os.path.isfile(DiveRTdbFile):
         print 'creating DiveRT.db'
         Sql.CreateEmptyDiveDB(DiveRTdbFile)
+        
+    if not os.path.isdir(IconDir):
+        print 'creating ', IconDir
+        os.mkdir( IconDir )
+        
+    if not os.path.isfile( IconDir + '\\arrow.png' ):
+        print 'creating arrow.png'
+        shutil.copy2('icons\\arrow.png', IconDir)
+        
+    if not os.path.isfile( IconDir + '\\circle.png' ):
+        print 'creating circle.png'
+        shutil.copy2('icons\\circle.png', IconDir)
     
     ds = Sql.DataStore(DiveRTdbFile)
     global CleanupRound
