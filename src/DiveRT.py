@@ -2,7 +2,7 @@
 #-*- coding: utf-8 -*-
 # Copyright (C) 2010 by Will Kamp <manimaul!gmail.com>
 
-import Grid, time, GUI, Sql, os, wx.aui, GPSCom, re, shutil 
+import Grid, time, GUI, Sql, os, wx.aui, GPSCom, re, shutil, Kml, subprocess
 import wx.grid as gridlib, wx.lib.scrolledpanel as scrolled
 
 class ConfirmDlg(GUI.ConfirmDlg): #POPUP WINDOW
@@ -25,6 +25,8 @@ class ConfirmDlg(GUI.ConfirmDlg): #POPUP WINDOW
         if nsel == -1:
             frame.listpanel.edit_Button.Enable(False)
             frame.listpanel.delete_Button.Enable(False)
+        diveKml.compileDiveFolders() #update kml map
+        diveKml.writeKmlToServer()
         self.Destroy()
     
     def _evtCancel(self, evt):
@@ -105,12 +107,16 @@ class EditDlg(GUI.EditDlg): #POPUP WINDOW
             data = datastore.GetDive(id)
             tender = str(data[10])
             self.tender_choice.SetStringSelection(tender)
-            lat = data[6]
-            self.lat_textCtrl.SetValue(lat)
-            long = data[7]
-            self.lon_textCtrl.SetValue(long)
-            bearing = data[8]
-            self.bearing_textCtrl.SetValue(bearing)
+            lat = data[6].split('*')
+            self.lat_textCtrl.SetValue(lat[0])
+            self.lat_choice.SetStringSelection(lat[1])
+            lon = data[7].split('*')
+            self.lon_textCtrl.SetValue(lon[0])
+            self.lon_choice.SetStringSelection(lon[1])
+            if data[8] != 'None':
+                bearing = data[8].split('*')
+                self.bearing_textCtrl.SetValue(bearing[0])
+                self.bearing_choice.SetStringSelection(bearing[1])
             datastore.Close()         
         else: #non full edits have no intormation stored in the database
             self.tender_staticText.Hide()
@@ -118,13 +124,15 @@ class EditDlg(GUI.EditDlg): #POPUP WINDOW
             self.m_staticline7.Hide()
             self.m_staticTextLat.Hide()
             self.lat_textCtrl.Hide()
+            self.lat_choice.Hide()
             self.m_staticTextLon.Hide()
             self.lon_textCtrl.Hide()
+            self.lon_choice.Hide()
             self.m_staticTextBearing.Hide()
             self.bearing_textCtrl.Hide()
+            self.bearing_choice.Hide()
             self.m_staticline1.Hide()
             self.Fit()
-            #todo
            
     def FmtString(self):
         #fix empty values
@@ -166,6 +174,58 @@ class EditDlg(GUI.EditDlg): #POPUP WINDOW
             str += apm
         return str
     
+    def floatstr(self, somestring):
+        mystr = ''
+        decimal = False
+        for each in somestring:
+            srch = re.search(r'\d', each)
+            if srch is not None:
+                mystr += srch.group(0)
+            srch = re.search(r'\.', each)
+            if srch is not None and decimal is False:
+                mystr += srch.group(0)
+                decimal = True
+        return mystr
+    
+    def _evtLatTxt(self, evt):
+        #only allow numbers and  one decimal
+        ctrl = evt.GetEventObject()
+        value = ctrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            ctrl.SetValue(newval)
+            ctrl.SetInsertionPointEnd()
+        if newval != '':
+            if float( newval ) > 90.0:
+                ctrl.SetValue( '90.0' )
+                ctrl.SetInsertionPointEnd()
+                
+    def _evtLonTxt(self, evt):
+        #only allow numbers and  one decimal
+        ctrl = evt.GetEventObject()
+        value = ctrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            ctrl.SetValue(newval)
+            ctrl.SetInsertionPointEnd()
+        if newval != '':
+            if float( newval ) > 180.0:
+                ctrl.SetValue( '180.0' )
+                ctrl.SetInsertionPointEnd()
+                
+    def _evtBearingTxt(self, evt):
+        #only allow numbers and  one decimal
+        ctrl = evt.GetEventObject()
+        value = ctrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            ctrl.SetValue(newval)
+            ctrl.SetInsertionPointEnd()
+        if newval != '':
+            if float( newval ) > 359.99:
+                ctrl.SetValue( '359.99' )
+                ctrl.SetInsertionPointEnd()
+    
     def _evtCancel(self, evt):
         self.Destroy()
         
@@ -181,12 +241,21 @@ class EditDlg(GUI.EditDlg): #POPUP WINDOW
                 diver = data[3]
                 start = self.FmtString()[0:8] 
                 stop = self.FmtString()[12:20]
-                lat = self.lat_textCtrl.GetValue()
-                long = self.lon_textCtrl.GetValue()
-                bearing = self.bearing_textCtrl.GetValue()
+                latval = self.lat_textCtrl.GetValue()
+                if latval == '':
+                    latval = '00.000000'
+                lat = latval + '*' + self.lat_choice.GetStringSelection()
+                lonval = self.lon_textCtrl.GetValue()
+                if lonval == '':
+                    lonval = '000.000000'
+                lon = lonval + '*' + self.lon_choice.GetStringSelection()
+                bval = self.bearing_textCtrl.GetValue()
+                if bval == '':
+                    bval = '000.00'
+                bearing = bval + '*' + self.bearing_choice.GetStringSelection()
                 notes = data[9]
                 tender = self.tender_choice.GetStringSelection()
-                datastore.UpdateDive(id, cleanup, date, diver, start, stop, lat, long, bearing, notes, tender)
+                datastore.UpdateDive(id, cleanup, date, diver, start, stop, lat, lon, bearing, notes, tender)
                 datastore.Close()
                 frame.grid._evtRefresh(None)
             
@@ -204,10 +273,27 @@ class EditDlg(GUI.EditDlg): #POPUP WINDOW
             #set listbox selection to one you were editing
             frame.listpanel.times_listBox.SetSelection(sel)
             frame.divepanel.tender = self.tender_choice.GetStringSelection()
-            frame.divepanel.lat = self.lat_textCtrl.GetValue()
-            frame.divepanel.long = self.lon_textCtrl.GetValue()
-            frame.divepanel.bearing = self.bearing_textCtrl.GetValue()
+            #frame.divepanel.lat = self.lat_textCtrl.GetValue()
+            #frame.divepanel.long = self.lon_textCtrl.GetValue()
+            #frame.divepanel.bearing = self.bearing_textCtrl.GetValue()
+            ##
+            latval = self.lat_textCtrl.GetValue()
+            if latval == '':
+                latval = '00.000000'
+            frame.divepanel.lat = latval + '*' + self.lat_choice.GetStringSelection()
+            lonval = self.lon_textCtrl.GetValue()
+            if lonval == '':
+                lonval = '000.000000'
+            frame.divepanel.long = lonval + '*' + self.lon_choice.GetStringSelection()
+            bval = self.bearing_textCtrl.GetValue()
+            if bval == '':
+                bval = '000.00'
+            frame.divepanel.bearing = bval + '*' + self.bearing_choice.GetStringSelection()
+            ##
             frame.divepanel.SaveDive()
+            
+        diveKml.compileDiveFolders() #update kml map
+        diveKml.writeKmlToServer()
         self.Destroy()
 
 class GPSSettings(GUI.GPSSettings): #POPUP WINDOW
@@ -538,7 +624,7 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         self.save_button.Bind(wx.EVT_BUTTON, self._evtSave)
         self.Bind(wx.EVT_CLOSE, self._evtClose)
         
-    def addRow(self, Name="", Duty="Diver and Tender", DiveRate=50, TendRate=20):
+    def addRow(self, Name="", Duty="Diver and Tender", DiveRate=45, TendRate=20):
         #print 'adding row#', self.rowNumber
         name_textCtrl = wx.TextCtrl( self, wx.ID_ANY, Name, wx.DefaultPosition, wx.DefaultSize, 0 )
         self.fgSizer.Add( name_textCtrl, 0, wx.ALL, 5 )
@@ -548,7 +634,7 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         duty_choice.SetStringSelection(Duty)
         self.fgSizer.Add( duty_choice, 0, wx.ALL, 5 )
         
-        diveRate_spinCtrl = wx.SpinCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 25, 100, 50 )
+        diveRate_spinCtrl = wx.SpinCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 25, 100, 45 )
         diveRate_spinCtrl.SetValue(DiveRate)
         self.fgSizer.Add( diveRate_spinCtrl, 0, wx.ALL, 5 )
         
@@ -601,15 +687,27 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         self.deleteRow(rownum)
         
     def _evtSave(self, evt):
-        datastore = Sql.DataStore(DiveRTdbFile)
-        datastore.DropCrewData()
-        for each in self.rowStack[0:-1]:
+        condition1 = False
+        condition2 = True
+        for each in self.rowStack[0:-1]: #don't allow null stacks or empty names
             if each is not None:
-                #print each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), each[3].GetValue()
-                datastore.AddCrew(each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), each[3].GetValue())
-        datastore.Close()
-        frame.divepanel.updateDiverTenderChoice()
-        self.Destroy()
+                if each[0].GetValue().strip() != "":
+                    condition1 = True #non empty name found
+                else:
+                    condition2 = False #empty name found
+                    
+        if condition1 and condition2:
+            datastore = Sql.DataStore(DiveRTdbFile)
+            datastore.DropCrewData()
+            for each in self.rowStack[0:-1]:
+                if each is not None:
+                    #print each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), each[3].GetValue()
+                    datastore.AddCrew(each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), each[3].GetValue())
+            datastore.Close()
+            frame.divepanel.updateDiverTenderChoice()
+            frame.divepanel.diver_choice.SetSelection(0)
+            frame.divepanel.tender_choice.SetSelection(0)
+            self.Destroy()
     
     def _evtClose(self, evt):
         self.Destroy()
@@ -640,23 +738,43 @@ class DataPanel(GUI.DataPanel): #AUI PANEL
         self.date_staticText.SetLabel(fmtnow)
         if hasattr(frame, 'gps'):
             lat = frame.gps.fmt_lat('DDD')
-            long = frame.gps.fmt_lon('DDD')
-            if lat is not None and long is not None:
+            lon = frame.gps.fmt_lon('DDD')
+            if lat is not None and lon is not None:
                 #frame.divepanel.lat = unicode(lat)
                 #frame.divepanel.long = unicode(long)
                 self.lat_staticText.SetLabel(unicode(lat))
-                self.long_staticText.SetLabel(unicode(long))
+                self.long_staticText.SetLabel(unicode(lon))
             bearing = frame.gps.fmt_bearing('M')
             if bearing is not 'None':
                 #frame.divepanel.bearing = unicode(bearing)
                 self.bearing_staticText.SetLabel(unicode(bearing))
+            
+            if ( lat != None ) == ( lon != None ) == ( bearing != None ):  
+                latitude = float( lat.split('*')[0] )
+                if lat.split('*')[1] == 'S':
+                    latitude = -latitude
+                longitude = float ( lon.split('*')[0] )
+                if lon.split('*')[1] == 'W':
+                    longitude = -longitude
+                heading = float ( bearing.split('*')[0] )
+                #print latitude, longitude, heading
+                startLatitude = float( frame.divepanel.lat.split('*')[0] )
+                if frame.divepanel.lat.split('*')[1] == 'S':
+                    startLatitude = -startLatitude
+                startLongitude = float ( frame.divepanel.long.split('*')[0] )
+                if frame.divepanel.long.split('*')[1] == 'W':
+                    startLongitude = -startLongitude
+                startHeading = float ( frame.divepanel.bearing.split('*')[0] )
+                #print frame.divepanel.lat, frame.divepanel.long, frame.divepanel.bearing
+                diveKml.compileLocationFolders( heading, longitude, latitude, startHeading, startLongitude, startLatitude)
+                diveKml.writeKmlToServer()
         frame.divepanel.CalcTimeUW()
 
 class DivePanel(GUI.DivePanel): #AUI PANEL frame.divepanel
     def init(self):
-        self.lat = '00.0000000'
-        self.long = '000.0000000'
-        self.bearing = '000.00'
+        self.lat = '00.0000000*'
+        self.long = '000.0000000*'
+        self.bearing = '000.00*'
         self.notes = ''
         
         self.updateDiverTenderChoice()
@@ -748,6 +866,11 @@ class DivePanel(GUI.DivePanel): #AUI PANEL frame.divepanel
                 if bearing is not 'None':
                     frame.divepanel.bearing = unicode(bearing)
             print 'Locking in coordinates', frame.divepanel.lat, frame.divepanel.long, frame.divepanel.bearing
+            ##force last cleanup and current date
+            frame.grid.cround_choice.SetSelection( frame.grid.cround_choice.GetItems().__len__()-1 )
+            self.datePicker.SetValue( wx.DateTime_Now() )
+            frame.grid._evtRoundChange()
+            ##
             frame.listpanel.edit_Button.Enable()
             frame.listpanel.delete_Button.Enable()
             frame.listpanel.times_listBox.Append(now)
@@ -771,9 +894,10 @@ class DivePanel(GUI.DivePanel): #AUI PANEL frame.divepanel
                 print 'Saving Dive to database'
                 self.SaveDive()
             print 'Resetting coordinates'
-            frame.divepanel.lat = '00.0000000'
-            frame.divepanel.long = '000.0000000'
-            frame.divepanel.bearing = '000.00'
+            frame.divepanel.lat = '00.0000000*'
+            frame.divepanel.long = '000.0000000*'
+            frame.divepanel.bearing = '000.00*'
+            
         nsel = frame.listpanel.times_listBox.GetItems().__len__()-1
         frame.listpanel.times_listBox.SetSelection(nsel)
         if evt is not None:
@@ -820,11 +944,12 @@ class DivePanel(GUI.DivePanel): #AUI PANEL frame.divepanel
         lastitem = frame.listpanel.times_listBox.GetItems()[-1]
         start = lastitem[0:8]
         stop = lastitem[12:20]
-        #TODO: retrieve this data:
         lastid = datastore.AppendDive(CleanupRound, date, self.diver, start, stop, self.lat, self.long, self.bearing, self.notes, self.tender)
         frame.listpanel.diveidlst.append(lastid) #track IDs of dives in list so records can be deleted
         datastore.Close()
         frame.grid._evtRefresh(None)
+        diveKml.compileDiveFolders()
+        diveKml.writeKmlToServer()
         #print frame.listpanel.diveidls
 
 class CustomDataTable(gridlib.PyGridTableBase): #BEGIN GRID STUFF
@@ -909,23 +1034,24 @@ class CustTableGrid(gridlib.Grid): #GRID STUFF
         day = self.GetCellValue(row, 0)
         #print self.GetRowLabelValue(row)
         name = self.GetColLabelValue(col)
-        if (name != "Dive Date") == (name != "Dives Totals") == (day != "Totals"):
-            print name, day
-            frame.divepanel.diver_choice.SetStringSelection(name)
-            
-            str_strptime = time.strptime(day, '%b %d %Y')
-            month = int(time.strftime('%m', str_strptime))
-            day = int(time.strftime('%d', str_strptime))
-            year = int(time.strftime('%Y', str_strptime))
-            wxdate = wx.DateTime()
-            wxdate.Set(day, month-1, year)
-            frame.divepanel.datePicker.SetValue( wxdate )
-            frame.divepanel._evtDiverChoice()
-        else:
-            frame.divepanel.datePicker.SetValue( wx.DateTime_Now() )
-            if (name != "Dive Date") == (name != "Dives Totals"):
+        if frame.divepanel.startstop_button.GetLabel() == 'Start Dive':
+            if (name != "Dive Date") == (name != "Dives Totals") == (day != "Totals"):
+                print name, day
                 frame.divepanel.diver_choice.SetStringSelection(name)
-            frame.divepanel._evtDiverChoice()
+                
+                str_strptime = time.strptime(day, '%b %d %Y')
+                month = int(time.strftime('%m', str_strptime))
+                day = int(time.strftime('%d', str_strptime))
+                year = int(time.strftime('%Y', str_strptime))
+                wxdate = wx.DateTime()
+                wxdate.Set(day, month-1, year)
+                frame.divepanel.datePicker.SetValue( wxdate )
+                frame.divepanel._evtDiverChoice()
+            else:
+                frame.divepanel.datePicker.SetValue( wx.DateTime_Now() )
+                if (name != "Dive Date") == (name != "Dives Totals"):
+                    frame.divepanel.diver_choice.SetStringSelection(name)
+                frame.divepanel._evtDiverChoice()
             
         
     def FormatCells(self):
@@ -981,7 +1107,7 @@ class GridPanel ( wx.Panel ): #END GRID STUFF
         self.m_staticline36 = wx.StaticLine( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
         self.bSizer.Add( self.m_staticline36, 0, wx.EXPAND |wx.ALL, 5 )
         
-        fgSizer12 = wx.FlexGridSizer( 1, 4, 0, 0 )
+        fgSizer12 = wx.FlexGridSizer( 1, 5, 0, 0 )
         fgSizer12.SetFlexibleDirection( wx.BOTH )
         fgSizer12.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
         
@@ -1000,6 +1126,9 @@ class GridPanel ( wx.Panel ): #END GRID STUFF
         self.report_button = wx.Button( self, wx.ID_ANY, u"View Round Report", wx.DefaultPosition, wx.DefaultSize, 0 )
         fgSizer12.Add( self.report_button, 0, wx.ALL, 5 )
         
+        self.map_button = wx.Button( self, wx.ID_ANY, u"View Map", wx.DefaultPosition, wx.DefaultSize, 0 )
+        fgSizer12.Add( self.map_button, 0, wx.ALL, 5 )
+        
         self.bSizer.Add( fgSizer12, 0, 0, 5 )
         
         self.hline = wx.StaticLine( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
@@ -1012,7 +1141,8 @@ class GridPanel ( wx.Panel ): #END GRID STUFF
         # Connect Events
         self.cround_choice.Bind( wx.EVT_CHOICE, self._evtRoundChange )
         self.newRound_button.Bind( wx.EVT_BUTTON, self._evtNewRound )
-        self.report_button.Bind( wx.EVT_BUTTON, self._evtReport )   
+        self.report_button.Bind( wx.EVT_BUTTON, self._evtReport )
+        self.map_button.Bind( wx.EVT_BUTTON, self._evtMap )   
     
     def _evtRefresh(self, evt=None):
         self.grid.grid.Table = Grid.CustomDataTable(CleanupRound, DiveRTdbFile)
@@ -1025,6 +1155,10 @@ class GridPanel ( wx.Panel ): #END GRID STUFF
         self.grid.Layout()
         #self.grid.SetAutoLayout(1)
         self.grid.SetupScrolling()
+        if (self.grid.grid.Table.GetNumberCols() == 2) and (self.cround_choice.GetSelection() == self.cround_choice.GetItems().__len__()-1):
+            self.newRound_button.SetLabel( u"Cancel New Round" )
+        else:
+            self.newRound_button.SetLabel( u"Start New Round" )
     
     def updateRoundChoices(self):
         datastore = Sql.DataStore(DiveRTdbFile)
@@ -1041,18 +1175,39 @@ class GridPanel ( wx.Panel ): #END GRID STUFF
             
     def _evtNewRound(self, evt):
         global CleanupRound
-        ds = Sql.DataStore(DiveRTdbFile)
-        CleanupRound = ds.GetLastCleanupRound()+1
-        if self.cround_choice.GetItems().count(str(CleanupRound)) == 0:
-            self.cround_choice.Append(str(CleanupRound))
-        self.cround_choice.SetSelection(CleanupRound-1)
-        self._evtRoundChange()
-        ds.Close()
+        
+        if self.newRound_button.GetLabel() == u"Start New Round":
+            ds = Sql.DataStore(DiveRTdbFile)
+            CleanupRound = ds.GetLastCleanupRound()+1
+            if self.cround_choice.GetItems().count(str(CleanupRound)) == 0:
+                self.cround_choice.Append(str(CleanupRound))
+            self.cround_choice.SetSelection(CleanupRound-1)
+            self._evtRoundChange()
+            ds.Close()
+            if self.cround_choice.GetSelection() == self.cround_choice.GetItems().__len__()-1:
+                self.newRound_button.SetLabel( u"Cancel New Round")
+        else:
+            CleanupRound = CleanupRound - 1
+            self.cround_choice.Delete( CleanupRound )
+            self.cround_choice.SetSelection( CleanupRound-1 )
+            self._evtRoundChange()
+            self.newRound_button.SetLabel( u"Start New Round")
         
     def _evtReport(self, evt):
         report = Report(None)
         report.ShowModal()
-
+        
+    def _evtMap(self, evt):
+        #look for google earth
+        filepath64 = "C:\\Program Files (x86)\\Google\\Google Earth\\client\\googleearth.exe"
+        filepath32 = "C:\\Program Files\\Google\\Google Earth\\client\\googleearth.exe"
+        if os.path.isfile( filepath64 ):
+            os.startfile( "C:\\ProgramData\\DiveRT\\DiveRT.kml" )
+        elif os.path.isfile( filepath32 ):
+            os.startfile( "C:\\ProgramData\\DiveRT\\DiveRT.kml" )
+        else:
+            print 'google earth isn\'t installed'
+            
 class DetailPanel(GUI.DetailPanel): #AUI PANEL
     def init(self):
         self.diveidlst = []
@@ -1110,8 +1265,8 @@ class AUIFrame(wx.Frame): #AUI FRAME
         self.MenuBar = wx.MenuBar( 0 )
         self.file_menu = wx.Menu()
         
-        self.export_menuItem = wx.MenuItem( self.file_menu, wx.ID_ANY, u"Export Map", wx.EmptyString, wx.ITEM_NORMAL )
-        self.file_menu.AppendItem( self.export_menuItem )
+        #self.export_menuItem = wx.MenuItem( self.file_menu, wx.ID_ANY, u"Export Map", wx.EmptyString, wx.ITEM_NORMAL )
+        #self.file_menu.AppendItem( self.export_menuItem )
         
         self.managedivers_menuItem = wx.MenuItem( self.file_menu, wx.ID_ANY, u"Manage Divers && Tenders", wx.EmptyString, wx.ITEM_NORMAL )
         self.file_menu.AppendItem( self.managedivers_menuItem )
@@ -1189,9 +1344,11 @@ class AUIFrame(wx.Frame): #AUI FRAME
         crewmanager.ShowModal()
     
     def _evtClose(self, evt):
+        self.Hide()
         if hasattr(self, 'gps'):
             print 'closing gps connection'
             self.gps.close()
+        diveKml.server.close()
         # deinitialize the frame manager
         self._mgr.UnInit()
         # delete the frame
@@ -1201,8 +1358,8 @@ def Main():
     global DiveRTDir
     global DiveRTdbFile
     global IconDir
+    global diveKml
     DiveRTDir = 'C:\\ProgramData\\DiveRT'
-    IconDir = 'C:\\ProgramData\DiveRT\\icons'
     DiveRTdbFile = 'C:\\ProgramData\\DiveRT\\DiveRT.db'
     
     if not os.path.isdir(DiveRTDir):
@@ -1212,18 +1369,10 @@ def Main():
     if not os.path.isfile(DiveRTdbFile):
         print 'creating DiveRT.db'
         Sql.CreateEmptyDiveDB(DiveRTdbFile)
-        
-    if not os.path.isdir(IconDir):
-        print 'creating ', IconDir
-        os.mkdir( IconDir )
-        
-    if not os.path.isfile( IconDir + '\\arrow.png' ):
-        print 'creating arrow.png'
-        shutil.copy2('icons\\arrow.png', IconDir)
-        
-    if not os.path.isfile( IconDir + '\\circle.png' ):
-        print 'creating circle.png'
-        shutil.copy2('icons\\circle.png', IconDir)
+    
+    diveKml = Kml.diveRTKml(DiveRTDir, DiveRTdbFile)
+    diveKml.compileDiveFolders()
+    diveKml.writeKmlToServer()
     
     ds = Sql.DataStore(DiveRTdbFile)
     global CleanupRound
@@ -1241,7 +1390,7 @@ def Main():
     frame.divepanel._evtDiverChoice() #force event to populate listbox if diver had dives on this date
     frame.datapanel.init()
     frame.grid.updateRoundChoices()
-    #frame.Show()
+    
     app.MainLoop()
 
 Main()

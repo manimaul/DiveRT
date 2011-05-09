@@ -1,0 +1,15 @@
+Aqu 00ffc1ff
+Blu 0000ffff
+BPk f61160ff 
+Bwn 837200ff
+DkG 005700ff
+Grn 00ff00ff
+Gry 9999b3ff
+LBu a8d7fdff
+LGn c0fdb5ff
+Pnk f69edbff
+Prp 7b1a69ff
+Red ff0000ff
+Tan ffc183ff
+Wht ffffffff
+Yel ffd300ff

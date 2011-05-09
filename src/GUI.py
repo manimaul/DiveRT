@@ -8,7 +8,6 @@
 ###########################################################################
 
 import wx
-import Grid
 
 ###########################################################################
 ## Class DivePanel
@@ -440,7 +439,7 @@ class EditDlg ( wx.Dialog ):
 		self.m_staticline61 = wx.StaticLine( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
 		bSizer4.Add( self.m_staticline61, 0, wx.EXPAND |wx.ALL, 5 )
 		
-		fgSizer9 = wx.FlexGridSizer( 2, 2, 0, 0 )
+		fgSizer9 = wx.FlexGridSizer( 3, 3, 0, 0 )
 		fgSizer9.SetFlexibleDirection( wx.BOTH )
 		fgSizer9.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
 		
@@ -452,6 +451,11 @@ class EditDlg ( wx.Dialog ):
 		self.lat_textCtrl.SetMaxLength( 12 ) 
 		fgSizer9.Add( self.lat_textCtrl, 0, wx.ALL, 5 )
 		
+		lat_choiceChoices = [ u"N", u"S" ]
+		self.lat_choice = wx.Choice( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, lat_choiceChoices, 0 )
+		self.lat_choice.SetSelection( 0 )
+		fgSizer9.Add( self.lat_choice, 0, wx.ALL, 5 )
+		
 		self.m_staticTextLon = wx.StaticText( self, wx.ID_ANY, u"Longitude:", wx.DefaultPosition, wx.DefaultSize, 0 )
 		self.m_staticTextLon.Wrap( -1 )
 		fgSizer9.Add( self.m_staticTextLon, 0, wx.ALL, 5 )
@@ -460,13 +464,23 @@ class EditDlg ( wx.Dialog ):
 		self.lon_textCtrl.SetMaxLength( 12 ) 
 		fgSizer9.Add( self.lon_textCtrl, 0, wx.ALL, 5 )
 		
+		lon_choiceChoices = [ u"W", u"E" ]
+		self.lon_choice = wx.Choice( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, lon_choiceChoices, 0 )
+		self.lon_choice.SetSelection( 0 )
+		fgSizer9.Add( self.lon_choice, 0, wx.ALL, 5 )
+		
 		self.m_staticTextBearing = wx.StaticText( self, wx.ID_ANY, u"Vessel Bearing:", wx.DefaultPosition, wx.DefaultSize, 0 )
 		self.m_staticTextBearing.Wrap( -1 )
 		fgSizer9.Add( self.m_staticTextBearing, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
 		
 		self.bearing_textCtrl = wx.TextCtrl( self, wx.ID_ANY, u"000.00", wx.DefaultPosition, wx.Size( 75,-1 ), 0 )
-		self.bearing_textCtrl.SetMaxLength( 6 ) 
+		self.bearing_textCtrl.SetMaxLength( 8 ) 
 		fgSizer9.Add( self.bearing_textCtrl, 0, wx.ALL, 5 )
+		
+		bearing_choiceChoices = [ u"M", u"T" ]
+		self.bearing_choice = wx.Choice( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, bearing_choiceChoices, 0 )
+		self.bearing_choice.SetSelection( 0 )
+		fgSizer9.Add( self.bearing_choice, 0, wx.ALL, 5 )
 		
 		bSizer4.Add( fgSizer9, 0, wx.ALIGN_CENTER_HORIZONTAL, 5 )
 		
@@ -496,6 +510,9 @@ class EditDlg ( wx.Dialog ):
 		self.stmin.Bind( wx.EVT_TEXT, self._evtMinSec )
 		self.enhr.Bind( wx.EVT_TEXT, self._evtHr )
 		self.enmin.Bind( wx.EVT_TEXT, self._evtMinSec )
+		self.lat_textCtrl.Bind( wx.EVT_TEXT, self._evtLatTxt )
+		self.lon_textCtrl.Bind( wx.EVT_TEXT, self._evtLonTxt )
+		self.bearing_textCtrl.Bind( wx.EVT_TEXT, self._evtBearingTxt )
 		self.okbutton.Bind( wx.EVT_BUTTON, self._evtOK )
 		self.m_button6.Bind( wx.EVT_BUTTON, self._evtCancel )
 	
@@ -511,6 +528,15 @@ class EditDlg ( wx.Dialog ):
 		event.Skip()
 	
 	
+	
+	def _evtLatTxt( self, event ):
+		event.Skip()
+	
+	def _evtLonTxt( self, event ):
+		event.Skip()
+	
+	def _evtBearingTxt( self, event ):
+		event.Skip()
 	
 	def _evtOK( self, event ):
 		event.Skip()
@@ -565,82 +591,6 @@ class ConfirmDlg ( wx.Dialog ):
 		event.Skip()
 	
 	def _evtYes( self, event ):
-		event.Skip()
-	
-
-###########################################################################
-## Class GridPanel
-###########################################################################
-
-class GridPanel ( wx.Panel ):
-	
-	def __init__( self, parent ):
-		wx.Panel.__init__ ( self, parent, id = wx.ID_ANY, pos = wx.DefaultPosition, size = wx.Size( 500,300 ), style = wx.TAB_TRAVERSAL )
-		
-		self.bSizer = wx.BoxSizer( wx.VERTICAL )
-		
-		self.m_staticText19 = wx.StaticText( self, wx.ID_ANY, u"Dive Table", wx.DefaultPosition, wx.DefaultSize, 0 )
-		self.m_staticText19.Wrap( -1 )
-		self.m_staticText19.SetFont( wx.Font( 12, 70, 90, 92, False, wx.EmptyString ) )
-		
-		self.bSizer.Add( self.m_staticText19, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
-		
-		self.m_staticline36 = wx.StaticLine( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
-		self.bSizer.Add( self.m_staticline36, 0, wx.EXPAND |wx.ALL, 5 )
-		
-		fgSizer12 = wx.FlexGridSizer( 1, 4, 0, 0 )
-		fgSizer12.SetFlexibleDirection( wx.BOTH )
-		fgSizer12.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
-		
-		self.m_staticText39 = wx.StaticText( self, wx.ID_ANY, u"Cleanup / Round", wx.DefaultPosition, wx.DefaultSize, 0 )
-		self.m_staticText39.Wrap( -1 )
-		fgSizer12.Add( self.m_staticText39, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 5 )
-		
-		cround_choiceChoices = []
-		self.cround_choice = wx.Choice( self, wx.ID_ANY, wx.DefaultPosition, wx.Size( 50,-1 ), cround_choiceChoices, 0 )
-		self.cround_choice.SetSelection( 0 )
-		fgSizer12.Add( self.cround_choice, 0, wx.ALL, 5 )
-		
-		self.newRound_button = wx.Button( self, wx.ID_ANY, u"Start New Round", wx.DefaultPosition, wx.DefaultSize, 0 )
-		fgSizer12.Add( self.newRound_button, 0, wx.ALL, 5 )
-		
-		self.report_button = wx.Button( self, wx.ID_ANY, u"View Round Report", wx.DefaultPosition, wx.DefaultSize, 0 )
-		fgSizer12.Add( self.report_button, 0, wx.ALL, 5 )
-		
-		self.bSizer.Add( fgSizer12, 0, 0, 5 )
-		
-		self.grid = Grid.CustTableGrid(self,  'C:\ProgramData\DiveRT\DiveRT.db')
-		self.bSizer.Add( self.grid, 0, wx.ALL, 5 )
-		
-		self.test_panel = wx.Panel( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
-		self.test_panel.SetBackgroundColour( wx.Colour( 153, 180, 209 ) )
-		
-		self.bSizer.Add( self.test_panel, 1, wx.ALL|wx.EXPAND, 5 )
-		
-		self.SetSizer( self.bSizer )
-		self.Layout()
-		
-		# Connect Events
-		self.Bind( wx.EVT_MOUSEWHEEL, self._evtScrollWheel )
-		self.cround_choice.Bind( wx.EVT_CHOICE, self._evtRoundChange )
-		self.newRound_button.Bind( wx.EVT_BUTTON, self._evtNewRound )
-		self.report_button.Bind( wx.EVT_BUTTON, self._evtReport )
-	
-	def __del__( self ):
-		pass
-	
-	
-	# Virtual event handlers, overide them in your derived class
-	def _evtScrollWheel( self, event ):
-		event.Skip()
-	
-	def _evtRoundChange( self, event ):
-		event.Skip()
-	
-	def _evtNewRound( self, event ):
-		event.Skip()
-	
-	def _evtReport( self, event ):
 		event.Skip()
 	
 

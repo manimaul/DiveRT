@@ -1,0 +1,7 @@
+DiveRT <Dive Recovery Tracker>
+Copyright (C) 2011 Will Kamp <manimaul!gmail.com>
+
+DiveRT was created by and for the crew aboard Tahta.  Use of DiveRT without the expressed permission from Will Kamp is prohibited.
+
+DiveRT records diver and tender dive times, position and bearing data into a sqlite3 database
+Connects to Nema0183 GPS and bearing sensor (reads HDG, RMC, GGA data)

@@ -3,7 +3,7 @@
 # Copyright (C) 2010 by Will Kamp <manimaul!gmail.com>
 
 import sqlite3 as sql
-import time
+import time, Kml
 
 def CreateEmptyDiveDB(filename):
     conn = sql.connect(filename)
@@ -159,7 +159,9 @@ class DataStore:
         #[(round, ozperhr), [(date, name, hrs, color, bearing, icon, note, lat, long), ] ]
         lst = []
         
-        colors = ('ff0000', '00ff00', 'ffd300', '72f6ff', '837200', 'ff1ab8', '72607b', '00ffc1', 'f61160', '8ca77b', '005700', 'ffc183', '0000ff', '9ec1ff', '9e4f46') #0:14
+        icons = Kml.iconList()
+        #colors = ( 'ffc183', 'ff0000', 'ff1ab8', '837200', '72607b', '8ca77b', '9e4f46')
+        #badcolors = ( '00ff00', '72f6ff',  'f61160', '00ffc1','005700', '9ec1ff', 'ffd300', '0000ff',)
         i = 0
         for number in self.GetBasicCleanupList(): #list of all rounds from dives
             folder = ( number, self.GetOzPerHour(number))
@@ -170,11 +172,17 @@ class DataStore:
             placemarks = []
             if fetch is not None:
                 for each in fetch:
-                    date = each[2]
+                    #date = each[2]
+                    str_strptime = time.strptime(each[2], '%b %d %Y')
+                    month = str( int( time.strftime('%m', str_strptime) ) )
+                    day = str( int( time.strftime('%d', str_strptime) ) )
+                    year = time.strftime('%y', str_strptime)
+                    date = month +'-'+ day #+'-'+ year
                     name = each[3]
-                    seconds = time.mktime(time.strptime(each[4] +' 1970', "%I:%M %p %Y")) - time.mktime(time.strptime(each[5] +' 1970', "%I:%M %p %Y"))
-                    hrs = str( seconds / 60 / 60 )
-                    color = colors[i]
+                    title = date + ' ' + name[0] #add initial to placemark title
+                    title = title + number #add round
+                    seconds = time.mktime(time.strptime(each[5] +' 1970', "%I:%M %p %Y")) - time.mktime(time.strptime(each[4] +' 1970', "%I:%M %p %Y"))
+                    hrs = str( round(seconds / 60 / 60, 2) )
                     lat = each[6]
                     latitude = lat.split('*')[0]
                     if lat.split('*')[1] == 'S':
@@ -185,21 +193,23 @@ class DataStore:
                         longitude = '-' + longitude
                     bearing = each[8]
                     if bearing == 'None':
-                        icon = 'circle'
+                        icon = 'circle' + icons[i]
+                        bearing = '0.0'
+                    elif ( float( bearing.split( '*' )[0] ) == 0.0):
+                        icon = 'circle' + icons[i]
                         bearing = '0.0'
                     else:
-                        icon = 'arrow'
+                        icon = 'arrow' + icons[i]
                         bearing = bearing.split('*')[0]
                     note = each[9]
-                    placemarks.append( (date, name, hrs, color, bearing, icon, note, longitude, latitude) )
-            if i == 15:
+                    placemarks.append( (title, name, hrs, bearing, icon, note, longitude, latitude) )
+            if i == icons.__len__() - 1:
                 i = 0
             else:
                 i += 1
             lst.append( (folder, placemarks) )
         return lst
-            
-            
+    
     def GetOzPerHour(self, cleanupNumber):
         self.curs.execute('select grams from cleanups where number=?', (cleanupNumber,) )
         fetch = self.curs.fetchone()

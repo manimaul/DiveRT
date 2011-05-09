@@ -1,46 +1,62 @@
-import os, Sql, shutil
+#!/usr/bin/env python
+#-*- coding: utf-8 -*-
+# Copyright (C) 2010 by Will Kamp <manimaul!gmail.com>
 
-DiveRT_kml = """\
+import os, Sql, shutil, KmlServer
+
+def iconList():
+    return [ 'Aqu.png', 'Blu.png', 'BPk.png', 'Bwn.png', 'DkG.png', 'Grn.png', 'Gry.png', 'LBu.png', 'LGn.png', 'Pnk.png', 'Prp.png', 'Red.png', 'Tan.png', 'Wht.png', 'Yel.png']
+
+class diveRTKml():
+    def __init__(self, DiveRTDir, DiveRTdbFile):
+        print 'initializing diveRTKml'
+        self.DiveRTDir = DiveRTDir
+        self.DiveRTdbFile = DiveRTdbFile
+        self.diveFolders = ""
+        self.locationFolders = ""
+        ## Templates
+        self._diveRTnetLink = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://earth.google.com/kml/2.2">
 <NetworkLink>
   <name>DiveRT</name>
   <open>1</open>
   <Link>
-    <href>C:\ProgramData\DiveRT\DiveRTdata.kml</href>
-    <refreshInterval>5</refreshInterval>
+    <href>http://127.0.0.1:8080/data.kml</href>
+    <refreshInterval>3</refreshInterval>
     <refreshMode>onInterval</refreshMode>
   </Link>
 </NetworkLink>
 </kml>
 """
-
-DiveRTdata_top = """\
+        self._diveRTdata = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://earth.google.com/kml/2.0">
-"""
-
-DiveRTdata_folderBegin = """\
+  <Document>
+    <name>DiveRT</name>
+%s
+%s
+  </Document>
+</kml>
+""" #%(diveFolders, locationFolders)
+        self._diveFolders = """\
 <Folder>
   <name>Cleanup-Round %s</name>
   <description>%s Oz/Hr</description>
-  <Style></Style>
 """ #%(round, ozperhr)
-
-DiveRTdata_placemark = """\
+        self._divePlacemark = """\
   <Placemark>
     <name>%s</name>
       <description>%s %shrs</description>
       <Style>
         <IconStyle>
-          <color>%sff</color>
           <heading>%s</heading>
           <Icon>
-            <href>C:\ProgramData\DiveRT\icons\%s.png</href>
+            <href>C:\ProgramData\DiveRT\icons\%s</href>
           </Icon>
         </IconStyle>
         <BalloonStyle>
-          <text>$[name] $[description]
+          <text>$[description]
           %s</text>
         </BalloonStyle>
       </Style>
@@ -48,72 +64,120 @@ DiveRTdata_placemark = """\
         <coordinates>%s, %s, 0.0</coordinates>
       </Point>
   </Placemark>
-""" #%(date, name, hrs, color, bearing, icon, note, long, lat)
-
-def main():
+""" #%(title, diver, hrs, bearing, icon, note, long, lat)
+        self._locationFolders = """\
+<Folder>
+  <name>Ship Location</name>
+  <Placemark>
+    <name>Current Location</name>
+      <description></description>
+      <Style>
+        <LabelStyle>
+          <color>ff0000ff</color>
+          <scale>1</scale>
+        </LabelStyle>
+        <IconStyle>
+          <heading>%s</heading>
+          <scale>1</scale>
+          <Icon>
+            <href>C:\\ProgramData\\DiveRT\\icons\\arrowship.png</href>
+          </Icon>
+        </IconStyle>
+        <BalloonStyle>
+          <text></text>
+        </BalloonStyle>
+      </Style>
+      <Point>
+        <coordinates>%s, %s, 0</coordinates>
+      </Point>
+  </Placemark>
+    <Placemark>
+    <name>Dive Start Location</name>
+      <description></description>
+      <Style>
+        <LabelStyle>
+          <color>5014b4ff</color>
+          <colorMode>normal</colorMode>
+          <scale>1</scale>
+        </LabelStyle>
+        <IconStyle>
+          <heading>%s</heading>
+          <scale>1</scale>
+          <Icon>
+            <href>C:\\ProgramData\\DiveRT\\icons\\arrowstart.png</href>
+          </Icon>
+        </IconStyle>
+        <BalloonStyle>
+          <text>
+          </text>
+        </BalloonStyle>
+      </Style>
+      <Point>
+        <coordinates>%s, %s, 0</coordinates>
+      </Point>
+  </Placemark>
+</Folder>
+""" #%(heading, long, lat, startHeading, startLong, startLat)
+        ## Templates end
+        self.createKmlIcons()
+        self.createNetworkLink()
+        self.server = KmlServer.KMLServer()
     
-
-    
-    DiveRT_kmlfile = 'C:\\ProgramData\\DiveRT\\DiveRT.kml'
-    DiveRT_kmlfd = open( DiveRT_kmlfile, 'w' )
-    DiveRT_kmlfd.writelines( DiveRT_kml )
-    DiveRT_kmlfd.close()
-    
-
-    
-
-    
-    DiveRTdata_kmlfile =  'C:\\ProgramData\\DiveRT\\DiveRTdata.kml'
-    DiveRTdata_kmlfd = open(DiveRTdata_kmlfile, 'w')
-    DiveRTdata_kmlfd.writelines( DiveRTdata_top )
-    ds = Sql.DataStore(DiveRTdbFile)
+    def createKmlIcons(self):
+        IconDir = self.DiveRTDir + '\\icons'
         
-    for each in ds.GetKMLData():
-        folderBegin = DiveRTdata_folderBegin %each[0]
-        DiveRTdata_kmlfd.writelines ( folderBegin )
-        for ea in each[1]:
-            placemark =  DiveRTdata_placemark %ea
-            DiveRTdata_kmlfd.writelines ( placemark )
-        DiveRTdata_kmlfd.writelines ( """</Folder>""" )
+        if not os.path.isdir(IconDir):
+            print 'creating ', IconDir
+            os.mkdir( IconDir )
         
-    DiveRTdata_kmlfd.writelines ( """</kml>""" )
-    ds.Close()
+        iconlst = iconList()
+        iconlst.append('ship.png')
+        iconlst.append('start.png')
+        for icon in iconlst:
+            if not os.path.isfile( IconDir + '\\arrow' + icon ):
+                print 'creating arrow' + icon
+                shutil.copy2('icons\\arrow' + icon, IconDir)
+                
+            if not os.path.isfile( IconDir + '\\circle' + icon ):
+                print 'creating circle' + icon
+                shutil.copy2('icons\\circle' + icon, IconDir)
+        
+    def createNetworkLink(self):
+        filepath = self.DiveRTDir + '\\DiveRT.kml'
+        fd = open( filepath, 'w' )
+        fd.writelines( self._diveRTnetLink )
+        fd.close()
+        
+    def compileDiveFolders(self):
+        #print 'compiling dive folders for kml'
+        self.diveFolders = "" #clear existing
+        ds = Sql.DataStore( self.DiveRTdbFile )
+        for each in ds.GetKMLData():
+            folderBegin = self._diveFolders %each[0]
+            self.diveFolders += folderBegin
+            for ea in each[1]:
+                placemark =  self._divePlacemark %ea
+                self.diveFolders += placemark
+            self.diveFolders += "</Folder>\n"
+        ds.Close()
     
-    ######
+    def compileLocationFolders(self, heading, long, lat, startHeading, startLong, startLat):
+        #print 'compiloing location folder for kml'
+        self.locationFolders = self._locationFolders %( str(heading), str(long), str(lat), str(startHeading), str(startLong), str(startLat) )
+        
     
-    DiveRTdata_kmlfd.close()
-
+    def writeKmlToServer(self):
+        #print 'writing kml data to KmlServe memory'
+        self.server.handler.dataKml = self._diveRTdata %( self.diveFolders, self.locationFolders )   
+    
 if __name__=="__main__":
-    global DiveRTDir
-    global DiveRTdbFile
-    global IconDir
+    from time import sleep
     DiveRTDir = 'C:\\ProgramData\\DiveRT'
-    IconDir = 'C:\\ProgramData\DiveRT\\icons'
     DiveRTdbFile = 'C:\\ProgramData\\DiveRT\\DiveRT.db'
+    dkml = diveRTKml(DiveRTDir, DiveRTdbFile)
+    dkml.compileDiveFolders()
+    dkml.compileLocationFolders( 190.0, 0.0, 0.0, 90.0, 0.0, 0.0 )
+    #print dkml._diveRTdata %( dkml.diveFolders, dkml.locationFolders )
+    dkml.writeKmlToServer()
+    sleep(60)
     
-    if not os.path.isdir(DiveRTDir):
-        print 'creating', DiveRTDir
-        os.mkdir( DiveRTDir )
-        
-    if not os.path.isfile(DiveRTdbFile):
-        print 'creating DiveRT.db'
-        Sql.CreateEmptyDiveDB( DiveRTdbFile )
-        
-    if not os.path.isdir(IconDir):
-        print 'creating ', IconDir
-        os.mkdir( IconDir )
-        
-    if not os.path.isfile( IconDir + '\\arrow.png' ):
-        print 'creating arrow.png'
-        shutil.copy2('icons\\arrow.png', IconDir)
-        
-    if not os.path.isfile( IconDir + '\\circle.png' ):
-        print 'creating circle.png'
-        shutil.copy2('icons\\circle.png', IconDir)
-        
-    main()
-        
-    
-        
-    
-        
