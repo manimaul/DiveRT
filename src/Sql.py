@@ -166,7 +166,7 @@ class DataStore:
         for number in self.GetBasicCleanupList(): #list of all rounds from dives
             folder = ( number, self.GetOzPerHour(number))
             #print folder
-            self.curs.execute('select * from dives where cleanupNumber=? and latitude!=? and longitude!=?', (number, '00.000000', '000.000000'))
+            self.curs.execute('select * from dives where cleanupNumber=?', (number))
             fetch = self.curs.fetchall()
             #print fetch
             placemarks = []
@@ -202,7 +202,8 @@ class DataStore:
                         icon = 'arrow' + icons[i]
                         bearing = bearing.split('*')[0]
                     note = each[9]
-                    placemarks.append( (title, name, hrs, bearing, icon, note, longitude, latitude) )
+                    if (float(latitude)!= 0.0) or (float(longitude)!= 0.0):
+                        placemarks.append( (title, name, hrs, bearing, icon, note, longitude, latitude) )
             if i == icons.__len__() - 1:
                 i = 0
             else:
@@ -416,7 +417,7 @@ class DataStore:
         return directory
     
     def AppendDive(self, cleanup, date, diver, start, stop, lat, long, bearing, notes, tender):
-        print 'sql inserting record into dives'
+        #print 'sql inserting record into dives'
         #recordID, cleanupNumber, diveDate, diverName, start, stop, latitude, longitude, heading
         t = (cleanup, date, diver, start, stop, lat, long, bearing, notes, tender)
         self.curs.execute("""insert into dives values(NULL,?,?,?,?,?,?,?,?,?,?)""", t)
@@ -424,13 +425,13 @@ class DataStore:
         return self.curs.lastrowid
     
     def DeleteDive(self, id):
-        print 'sql deleting from dives rowid: ', id
+        #print 'sql deleting from dives rowid: ', id
         t = (str(id),)
         self.curs.execute("""delete from dives where rowid=?""", t)
         self.conn.commit()
         
     def UpdateDive(self, id, cleanup, date, diver, start, stop, lat, long, bearing, notes, tender):
-        print 'sql updating record in dives rowid: ', id
+        #print 'sql updating record in dives rowid: ', id
         val = (str(cleanup), str(date), diver, start, stop, lat, long, str(bearing), notes, tender, str(id))
         sql = """update dives set 
                  cleanupNumber='%s', 
@@ -448,7 +449,7 @@ class DataStore:
         self.conn.commit()
         
     def UpdateDive2(self, id, cleanup, diver):
-        print 'sql updating record in dives rowid: ', id
+        #print 'sql updating record in dives rowid: ', id
         val = (str(cleanup), diver, str(id))
         sql = """update dives set cleanupNumber='%s', 
                  diverName='%s' 

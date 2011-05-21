@@ -33,6 +33,9 @@ class ThreadedHttpRequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(self.dataKml)
         except:
             print 'HTTP GET response not sent'
+            
+    def log_message(self, format, *args):
+        return #supress log messages
 
 class HTTPServer(ThreadingMixIn, HTTPServer):
     pass
@@ -60,13 +63,13 @@ class KMLServer:
         server_thread = Thread(target=self.server.serve_forever, name='kmld-thread')
         server_thread.setDaemon(True)
         server_thread.start()
-        print "KmlServer loop running in thread:", server_thread.getName()
+        #print "KmlServer loop running in thread:", server_thread.getName()
         
     def close(self):
-        print "Shutting down kml server..."
+        #print "Shutting down kml server..."
         self.server.shutdown()
         self.server.server_close()
-        print "kml server down"
+        #print "kml server down"
         
         
 if __name__ == '__main__':

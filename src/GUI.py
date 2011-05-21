@@ -768,7 +768,7 @@ class About ( wx.Dialog ):
 		
 		bSizer12 = wx.BoxSizer( wx.VERTICAL )
 		
-		self.m_staticText40 = wx.StaticText( self, wx.ID_ANY, u"Dive RT", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText40 = wx.StaticText( self, wx.ID_ANY, u"Dive RT v1.01", wx.DefaultPosition, wx.DefaultSize, 0 )
 		self.m_staticText40.Wrap( -1 )
 		self.m_staticText40.SetFont( wx.Font( 12, 70, 90, 92, False, wx.EmptyString ) )
 		

@@ -309,11 +309,11 @@ class GPSSettings(GUI.GPSSettings): #POPUP WINDOW
     
     def _evtCom(self, evt):
         if hasattr(frame, 'gps'):
-            print 'closing previous gps connection'
+            #print 'closing previous gps connection'
             frame.gps.close()
         com = 'COM' + str(self.com_spinCtrl.GetValue())
         baud = self.baud_comboBox.GetValue()
-        print 'connecting to:', com, baud
+        #print 'connecting to:', com, baud
         frame.gps = GPSCom.gps(com, baud)
         
         ds = Sql.DataStore(DiveRTdbFile)
@@ -340,7 +340,7 @@ class Report(GUI.RoundReport): #POPUP WINDOW
         comparelst = savedDiverRates.keys()
         comparelst.reverse()
         if comparelst == diverlist:
-            print 'retrieving saved diver rates'
+            #print 'retrieving saved diver rates'
             diverrates = savedDiverRates
         
         self.diverRows = []
@@ -659,7 +659,7 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         self.rowNumber += 1
         
     def deleteRow(self, rownum):
-        print 'deleting row: ', rownum
+        #print 'deleting row: ', rownum
         listofdestroy = self.rowStack[rownum]
         for each in listofdestroy:
             each.Destroy()
@@ -855,7 +855,7 @@ class DivePanel(GUI.DivePanel): #AUI PANEL frame.divepanel
         val = self.startstop_button.GetLabel()
         now = time.strftime('%I:%M %p', time.localtime())
         if val == 'Start Dive':
-            print 'Starting Dive'
+            #print 'Starting Dive'
             if hasattr(frame, 'gps'):
                 lat = frame.gps.fmt_lat('DDD')
                 long = frame.gps.fmt_lon('DDD')
@@ -865,11 +865,14 @@ class DivePanel(GUI.DivePanel): #AUI PANEL frame.divepanel
                 bearing = frame.gps.fmt_bearing('M')
                 if bearing is not 'None':
                     frame.divepanel.bearing = unicode(bearing)
-            print 'Locking in coordinates', frame.divepanel.lat, frame.divepanel.long, frame.divepanel.bearing
+            #print 'Locking in coordinates', frame.divepanel.lat, frame.divepanel.long, frame.divepanel.bearing
             ##force last cleanup and current date
             frame.grid.cround_choice.SetSelection( frame.grid.cround_choice.GetItems().__len__()-1 )
             self.datePicker.SetValue( wx.DateTime_Now() )
             frame.grid._evtRoundChange()
+            ##disable round change
+            frame.grid.cround_choice.Disable()
+            frame.grid.newRound_button.Disable()
             ##
             frame.listpanel.edit_Button.Enable()
             frame.listpanel.delete_Button.Enable()
@@ -880,7 +883,7 @@ class DivePanel(GUI.DivePanel): #AUI PANEL frame.divepanel
             self.startstop_button.SetLabel('Stop Dive')
             self.status_textCtrl.SetValue('Dive in progress')
         else:
-            print 'Stopping Dive'
+            #print 'Stopping Dive'
             lst = frame.listpanel.times_listBox.GetItems()
             start = lst[-1]
             dex = lst.__len__()-1
@@ -891,12 +894,16 @@ class DivePanel(GUI.DivePanel): #AUI PANEL frame.divepanel
             self.startstop_button.SetLabel('Start Dive')
             self.status_textCtrl.SetValue('Dive stopped')
             if evt is not None: #evt is None only when dive cancelled from ConfirmDlg
-                print 'Saving Dive to database'
+                #print 'Saving Dive to database'
                 self.SaveDive()
-            print 'Resetting coordinates'
+            #print 'Resetting coordinates'
             frame.divepanel.lat = '00.0000000*'
             frame.divepanel.long = '000.0000000*'
             frame.divepanel.bearing = '000.00*'
+            ##disable round change
+            frame.grid.cround_choice.Enable()
+            frame.grid.newRound_button.Enable()
+            ##
             
         nsel = frame.listpanel.times_listBox.GetItems().__len__()-1
         frame.listpanel.times_listBox.SetSelection(nsel)
@@ -905,13 +912,13 @@ class DivePanel(GUI.DivePanel): #AUI PANEL frame.divepanel
         
     def _evtTenderChoice(self, evt):
         self.tender = self.tender_choice.GetStringSelection()
-        print 'tender selected:', self.tender
+        #print 'tender selected:', self.tender
         
     def _evtDiverChoice(self, evt=None):
         self.diver = self.diver_choice.GetStringSelection()
         date = self.datePicker.GetValue().Format('%b %d %Y')
-        print 'diver selected:', self.diver
-        print 'date selected:', date
+        #print 'diver selected:', self.diver
+        #print 'date selected:', date
         #see if there is anything in the database:
         datastore = Sql.DataStore(DiveRTdbFile)
         data = datastore.GetDiverDateSQLData(self.diver, date, CleanupRound)
@@ -930,7 +937,7 @@ class DivePanel(GUI.DivePanel): #AUI PANEL frame.divepanel
             lastid = each[0]
             frame.listpanel.times_listBox.Append(start + ' to ' + stop)
             frame.listpanel.diveidlst.append(lastid)
-        print 'dive recordIDs in listbox: ', frame.listpanel.diveidlst
+        #print 'dive recordIDs in listbox: ', frame.listpanel.diveidlst
         nsel = frame.listpanel.times_listBox.GetItems().__len__()-1
         frame.listpanel.times_listBox.SetSelection(nsel)
         datastore.Close()
@@ -1005,7 +1012,7 @@ class CustTableGrid(gridlib.Grid): #GRID STUFF
             ds = Sql.DataStore(dbfile)
             cleanup = ds.GetLastCleanupRound()
             ds.Close()
-        print 'grid using cleanup #', cleanup
+        #print 'grid using cleanup #', cleanup
         table = CustomDataTable(cleanup, dbfile)
 
         # The second parameter means that the grid is to take ownership of the
@@ -1036,7 +1043,7 @@ class CustTableGrid(gridlib.Grid): #GRID STUFF
         name = self.GetColLabelValue(col)
         if frame.divepanel.startstop_button.GetLabel() == 'Start Dive':
             if (name != "Dive Date") == (name != "Dives Totals") == (day != "Totals"):
-                print name, day
+                #print name, day
                 frame.divepanel.diver_choice.SetStringSelection(name)
                 
                 str_strptime = time.strptime(day, '%b %d %Y')
@@ -1089,8 +1096,6 @@ class GridGridPanel( scrolled.ScrolledPanel ): #GRID STUFF
         self.SetAutoLayout(1)
         self.SetupScrolling()
         
-    def onWheel(self, event):
-        print 'wheel'
 
 class GridPanel ( wx.Panel ): #END GRID STUFF
     def __init__( self, parent ):
@@ -1234,7 +1239,7 @@ class DetailPanel(GUI.DetailPanel): #AUI PANEL
             EditDialog.EnableFullEdit(False)
         if selStr.__len__() == 20: #has start and stop time
             dex = frame.listpanel.times_listBox.GetSelection()
-            print 'editing recordID', frame.listpanel.diveidlst[dex]
+            #print 'editing recordID', frame.listpanel.diveidlst[dex]
             EditDialog.IsFullEdit = True
             EditDialog.EnableFullEdit()
         EditDialog.EditFillValues()
@@ -1256,10 +1261,6 @@ class AUIFrame(wx.Frame): #AUI FRAME
         self.listpanel.init() 
         self.DefaultLayout()
         self.BindEvents()
-        self.Bind( wx.EVT_LEFT_DOWN, self._evtScrollWheel )
-        
-    def _evtScrollWheel( self, event):
-        print 'hi'
         
     def CreateMenu(self):
         self.MenuBar = wx.MenuBar( 0 )
@@ -1346,7 +1347,7 @@ class AUIFrame(wx.Frame): #AUI FRAME
     def _evtClose(self, evt):
         self.Hide()
         if hasattr(self, 'gps'):
-            print 'closing gps connection'
+            #print 'closing gps connection'
             self.gps.close()
         diveKml.server.close()
         # deinitialize the frame manager
@@ -1363,11 +1364,11 @@ def Main():
     DiveRTdbFile = 'C:\\ProgramData\\DiveRT\\DiveRT.db'
     
     if not os.path.isdir(DiveRTDir):
-        print 'creating', DiveRTDir
+        #print 'creating', DiveRTDir
         os.mkdir(DiveRTDir)
         
     if not os.path.isfile(DiveRTdbFile):
-        print 'creating DiveRT.db'
+        #print 'creating DiveRT.db'
         Sql.CreateEmptyDiveDB(DiveRTdbFile)
     
     diveKml = Kml.diveRTKml(DiveRTDir, DiveRTdbFile)
@@ -1377,7 +1378,7 @@ def Main():
     ds = Sql.DataStore(DiveRTdbFile)
     global CleanupRound
     CleanupRound = ds.GetLastCleanupRound()
-    print 'Setting CleanupRound', CleanupRound
+    #print 'Setting CleanupRound', CleanupRound
     ds.Close()
     
     app = wx.App(redirect=False)

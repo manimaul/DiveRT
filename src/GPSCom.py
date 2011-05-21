@@ -60,7 +60,7 @@ class gps():
                 self.com = Serial(com, baud, timeout=timeOut) #open serial port
                 self.comT.start()
             except:
-                print com + ' not available!'
+                #print com + ' not available!'
                 self.close()
         else:
             self.sim = True
@@ -70,7 +70,7 @@ class gps():
                 self.com = open(com, 'rb')
                 self.comT.start()
             except:
-                print com + ' cannot be openned!'
+                #print com + ' cannot be openned!'
                 self.close()
             
     def setfreshtime(self, freshtime):
@@ -79,7 +79,7 @@ class gps():
         self.freshF = Timer(self.freshtime, self.keepfresh)
                 
     def runsim(self):
-        print 'sim file open... reading'
+        #print 'sim file open... reading'
         lines = self.com.readlines()
         self.com.close()
         #begin calculate lines per second of replay file for replay speed
@@ -91,14 +91,14 @@ class gps():
         delay = .25 #default seconds per line
         for line in lines: #count lines
             linecount += 1
-        print 'total lines in file:', linecount
+        #print 'total lines in file:', linecount
         for line in lines: #count lines until first time code
             line1 += 1
             if self.sentencID(line) == 'RMC': 
                 self.rmc(line)
                 tstamp1 = self.data_epochUtc
                 self.data_epochUtc = None
-                print 'got 1st time-stamp from an RMC, line#:', line1, 'epoch:', tstamp1
+                #print 'got 1st time-stamp from an RMC, line#:', line1, 'epoch:', tstamp1
                 break
         for line in reversed(lines): #count lines backwards to first time code
             line2 += 1
@@ -108,13 +108,13 @@ class gps():
                 tstamp2 = self.data_epochUtc
                 self.data_epochUtc = None
                 line2 += 1 #its the next line
-                print 'got last time-stamp from an RMC, line#:', line2, 'epoch:', tstamp2
+                #print 'got last time-stamp from an RMC, line#:', line2, 'epoch:', tstamp2
                 break
         if tstamp1 != 0 and tstamp2 != 0 and tstamp2-tstamp1 != 0:
             seconds = float(tstamp2 - tstamp1)
             numline = float(line2 - line1)
             delay = round(seconds/numline, 3) / self.ticktime
-        print 'setting replay delay to: ' + str(delay)
+        #print 'setting replay delay to: ' + str(delay)
         self.simread(lines, delay)
                 
     def simread(self, lines, delay):
@@ -131,10 +131,10 @@ class gps():
                         self.sortLine(line)
                 sleep(delay)
         if self.alive.isSet() and self.simloop == True:
-            print 'looping gps playback'
+            #print 'looping gps playback'
             self.simread(lines, delay)
         else:
-            print 'simulation finished'
+            #print 'simulation finished'
             self.alive.clear()
         
     def ticktock(self):
@@ -144,7 +144,7 @@ class gps():
             sleep(self.ticktime)
             
     def readCom(self):
-        print 'com port open... reading'
+        #print 'com port open... reading'
         while self.alive.isSet():
             try:
                 line = self.com.readline()
@@ -158,7 +158,7 @@ class gps():
                     elif self.line_inspect(line):
                         self.sortLine(line)
             except:
-                print 'GPS receiver was disconnected!'
+                #print 'GPS receiver was disconnected!'
                 self.alive.clear()
                           
     def keepfresh(self):
@@ -219,15 +219,15 @@ class gps():
     def close(self):
         self.alive.clear()
         if self.comT.isAlive():
-            print 'joining Gpscom.comT'
+            #print 'joining Gpscom.comT'
             self.comT.join()
-        print 'joining Gpscom.tickT'
+        #print 'joining Gpscom.tickT'
         self.tickT.join()
-        print 'joining Gpscom.freshT'
+        #print 'joining Gpscom.freshT'
         self.freshF.cancel()
         self.freshT.join()
         if hasattr(self, 'com') and self.sim == False: #simulation files are already closed
-            print 'closing Gpscom.com'
+            #print 'closing Gpscom.com'
             self.com.close()
 
     def line_inspect(self, line):

@@ -56,7 +56,7 @@ class CustTableGrid(gridlib.Grid):
             ds = Sql.DataStore(dbfile)
             cleanup = ds.GetLastCleanupRound()
             ds.Close()
-        print 'grid using cleanup #', cleanup
+        #print 'grid using cleanup #', cleanup
         table = CustomDataTable(cleanup, dbfile)
 
         # The second parameter means that the grid is to take ownership of the
@@ -81,9 +81,9 @@ class CustTableGrid(gridlib.Grid):
         self.ClearSelection()
         col = event.GetCol()
         row = event.GetRow()
-        print "Cell Select", row, col
+        #print "Cell Select", row, col
         self.SetGridCursor(row, col)
-        print self.GetCellValue(row, col)
+        #print self.GetCellValue(row, col)
         
     def FormatCells(self):
         #cell formating
@@ -119,9 +119,6 @@ class GridGridPanel( scrolled.ScrolledPanel ):
         self.SetSizer( self.bSizer )
         self.SetAutoLayout(1)
         self.SetupScrolling()
-        
-    def onWheel(self, event):
-        print 'wheel'
         
 class GridPanel ( wx.Panel ):
     def __init__( self, parent ):

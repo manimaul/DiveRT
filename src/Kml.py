@@ -9,7 +9,7 @@ def iconList():
 
 class diveRTKml():
     def __init__(self, DiveRTDir, DiveRTdbFile):
-        print 'initializing diveRTKml'
+        #print 'initializing diveRTKml'
         self.DiveRTDir = DiveRTDir
         self.DiveRTdbFile = DiveRTdbFile
         self.diveFolders = ""

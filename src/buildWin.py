@@ -19,7 +19,7 @@ buildOptions = dict(compressed = True)
 
  
 setup(name='DiveRT', 
-        version  = '1.0', 
+        version  = '1.01', 
         author = 'Will Kamp', 
         author_email = 'manimaul@gmail.com', 
         url = 'http://matrixmariner.com',

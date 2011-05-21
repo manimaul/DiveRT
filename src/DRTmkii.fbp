@@ -5730,7 +5730,7 @@
                         <property name="font">,90,92,12,70,0</property>
                         <property name="hidden">0</property>
                         <property name="id">wxID_ANY</property>
-                        <property name="label">Dive RT</property>
+                        <property name="label">Dive RT v1.01</property>
                         <property name="maximum_size"></property>
                         <property name="minimum_size"></property>
                         <property name="name">m_staticText40</property>
