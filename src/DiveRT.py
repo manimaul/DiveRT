@@ -327,6 +327,7 @@ class Report(GUI.RoundReport): #POPUP WINDOW
     def _evtInit(self, evt):
         ds = Sql.DataStore(DiveRTdbFile)
         self.round_textCtrl.SetValue( str(CleanupRound) )
+        self.dateRange_staticText.SetLabel( ds.GetRoundDateRange(CleanupRound) )
         self.totaltime = ds.GetTotalHours(CleanupRound)
         self.totalHours_textCtrl.SetValue(self.totaltime)
         
@@ -390,7 +391,7 @@ class Report(GUI.RoundReport): #POPUP WINDOW
         
         tenderrate_textCtrl.Bind( wx.EVT_TEXT, lambda evt, h=tenderhours_textCtrl, r=tenderrate_textCtrl, p=tenderpay_textCtrl : self._evtTenderRateSet(h, r, p, evt) )
         
-        self.tenderRows.append( (tenderhours_textCtrl, tenderrate_textCtrl, tenderpay_textCtrl) )
+        self.tenderRows.append( (tenderhours_textCtrl, tenderrate_textCtrl, tenderpay_textCtrl, tendername_textCtrl) )
         
     def _evtTenderRateSet(self, tenderhours_textCtrl, tenderrate_textCtrl, tenderpay_textCtrl, evt=None):
         val = tenderrate_textCtrl.GetValue()
@@ -410,9 +411,15 @@ class Report(GUI.RoundReport): #POPUP WINDOW
         tenderpay_textCtrl.SetValue( "$" + str(pay) )
             
     def updateDiverRows(self):
+        totalGrams = float( self.totalGrams_textCtrl.GetValue() )
+        diverGrams = 0
         for row in self.diverRows:
             self._evtDiverPercentSet(row[0], row[1], row[2], row[3] )
-            
+            diverGrams += float( row[2].GetValue() )
+        grams = totalGrams - diverGrams
+        self.remainder_textCtrl.SetValue( str(grams) )
+        self.remainderEstVal_textCtrl.SetValue( self.grams2EstDollars(grams) )
+        
     def addDiverRow(self, name, hours, percent):
         divername_textCtrl = wx.TextCtrl( self, wx.ID_ANY, name, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
         divername_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
@@ -435,7 +442,7 @@ class Report(GUI.RoundReport): #POPUP WINDOW
         
         diverperct_textCtrl.Bind( wx.EVT_TEXT, lambda evt, h=diverhours_textCtrl, p=diverperct_textCtrl, g=diverpay_textCtrl, e=payvalue_textCtrl, : self._evtDiverPercentSet(h, p, g, e, evt))
         
-        self.diverRows.append( (diverhours_textCtrl, diverperct_textCtrl, diverpay_textCtrl, payvalue_textCtrl) )
+        self.diverRows.append( (diverhours_textCtrl, diverperct_textCtrl, diverpay_textCtrl, payvalue_textCtrl, divername_textCtrl) )
         
     def _evtDiverPercentSet(self, diverhours_textCtrl, diverperct_textCtrl, diverpay_textCtrl, payvalue_textCtrl, evt=None ):
         val = diverperct_textCtrl.GetValue()
@@ -517,8 +524,8 @@ class Report(GUI.RoundReport): #POPUP WINDOW
             self.totalGrams_textCtrl.SetInsertionPointEnd()
         #recalculate Estimated Total Value
         self.SetEstTotal()
-        #recalculate each divers pay
-        self.updateDiverRows()
+        #recalculate each divers pay and dredge owner's total
+        self.updateDiverRows()        
     
     def _evtPctLossChange(self, evt):
         #only allow numbers and  one decimal
@@ -566,6 +573,226 @@ class Report(GUI.RoundReport): #POPUP WINDOW
         ds.Close()
         self.Destroy()
         
+    def _evtPrintView(self, evt):
+        #templates
+        top = """\
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<HTML>
+<HEAD>
+    <META HTTP-EQUIV="CONTENT-TYPE" CONTENT="text/html; charset=windows-1252">
+    <TITLE></TITLE>
+    <META NAME="GENERATOR" CONTENT="DiveRT">
+    <STYLE TYPE="text/css">
+    <!--
+        @page { margin: 0.79in }
+        P { margin-bottom: 0.08in }
+        TD P { margin-bottom: 0in }
+        A:link { so-language: zxx }
+    -->
+    </STYLE>
+</HEAD>
+<BODY LANG="en-US" DIR="LTR">
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><B>Dive RT Report</B></P>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Cleanup / Round %s</B></I></P>
+<CENTER>
+    <TABLE WIDTH=316 BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+        <COL WIDTH=215>
+        <COL WIDTH=83>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Total Dive Hours</P>
+            </TD>
+            <TD WIDTH=83 >
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Total Grams Recovered</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>London Spot</P>
+            </TD>
+            <TD WIDTH=83 >
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Estimated Refinement Recovery</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Estimated Refinement Value</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+    </TABLE>    
+</CENTER>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P><P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Dredge Owner Cut</B></I></P>
+<TABLE WIDTH=100%% BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <TR VALIGN=TOP>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Grams</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Estimated Value</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+    </TR>
+</TABLE>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P>\
+""" #%( round, hours, grams, spot, percent, estimate )
+        
+        diveTop = """\
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Diving</B></I></P>
+<TABLE WIDTH=100% BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <TR VALIGN=TOP>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Diver Name</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Diver Hours</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>% of time</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Grams</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Estimated Value</P>
+        </TD>
+    </TR>
+"""
+        
+        dive = """\
+    <TR VALIGN=TOP>
+        <TD WIDTH=20%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+    </TR>
+""" #%( name, hours, rate, grams, estimate)
+            
+        tendTop = """\
+</TABLE>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Tending</B></I></P>
+<TABLE WIDTH=100% BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+    <COL WIDTH=64*>
+    <COL WIDTH=64*>
+    <COL WIDTH=64*>
+    <COL WIDTH=64*>
+    <TR VALIGN=TOP>
+        <TD WIDTH=25%>
+            <P ALIGN=CENTER>Tender Name</P>
+        </TD>
+        <TD WIDTH=25%>
+            <P ALIGN=CENTER>Tending Hours</P>
+        </TD>
+        <TD WIDTH=25%>
+            <P ALIGN=CENTER>Rate</P>
+        </TD>
+        <TD WIDTH=25%>
+            <P ALIGN=CENTER>Balance $</P>
+        </TD>
+    </TR>
+"""
+        
+        tend = """\
+    <TR VALIGN=TOP>
+        <TD WIDTH=25%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=25%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=25%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=25%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+    </TR>
+""" # %(name, hours, rate, pay)
+        
+        bottom = """\
+</TABLE>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><BR>
+</P>
+</BODY>
+</HTML>
+"""
+        
+        #compile templates
+        top = top %( self.round_textCtrl.GetValue() + '<BR>' + self.dateRange_staticText.GetLabel(), 
+                     self.totalHours_textCtrl.GetValue(), 
+                     self.totalGrams_textCtrl.GetValue(), 
+                     self.londonSpot_textCtrl.GetValue(), 
+                     self.percentLoss_textCtrl.GetValue(), 
+                     self.estTotal_textCtrl.GetValue(),
+                     self.remainder_textCtrl.GetValue(),
+                     self.remainderEstVal_textCtrl.GetValue() )
+        dives = ""
+        for row in self.diverRows:
+            dives += dive %( row[4].GetValue(),
+                             row[0].GetValue(),
+                             row[1].GetValue(),
+                             row[2].GetValue(),
+                             row[3].GetValue() )
+        tends = ""
+        for row in self.tenderRows:
+            tends += tend %( row[3].GetValue(),
+                             row[0].GetValue(),
+                             row[1].GetValue(),
+                             row[2].GetValue() )
+        #write to html file
+        filepath = DiveRTDir+'\\DiveRT_R%s.html' %( self.round_textCtrl.GetValue())
+        fd = open( filepath, 'w' )
+        fd.write( top+diveTop+dives+tendTop+tends+bottom )
+        fd.close()
+        os.startfile( filepath )
+        #open file in default browser
+        
     def _evtClose(self, evt):
         self.Destroy()
 
@@ -576,16 +803,16 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         self.SetSizeHintsSz( wx.DefaultSize, wx.DefaultSize )
         
         self.bxSizer1 = wx.BoxSizer( wx.VERTICAL)
-        self.bxSizer2 = wx.BoxSizer( wx.VERTICAL )
-        self.fgSizer = wx.FlexGridSizer( 99, 5, 0, 0 )
+        #self.bxSizer2 = wx.BoxSizer( wx.VERTICAL )
+        self.fgSizer = wx.FlexGridSizer( 99, 4, 0, 0 )
         self.fgSizer.SetFlexibleDirection( wx.BOTH )
         self.fgSizer.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
         
         self.rowNumber = 0
         self.rowStack = []
         
-        self.bxSizer1.Add( self.bxSizer2, 1, wx.EXPAND, 5)
-        self.bxSizer2.Add( self.fgSizer, 1, wx.EXPAND, 5 )
+        self.bxSizer1.Add( self.fgSizer, 1, wx.EXPAND, 5)
+        #self.bxSizer2.Add( self.fgSizer, 1, wx.EXPAND, 5 )
         
         self.addStaticControls()
 
@@ -612,19 +839,38 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         diveRate_staticText.Wrap( -1 )
         self.fgSizer.Add( diveRate_staticText, 0, wx.ALL, 5 )
         
-        tenderRate_staticText = wx.StaticText( self, wx.ID_ANY, u"Tender Rate ($/hr)", wx.DefaultPosition, wx.DefaultSize, 0 )
-        tenderRate_staticText.Wrap( -1 )
-        self.fgSizer.Add( tenderRate_staticText, 0, wx.ALL, 5 )
+        #tenderRate_staticText = wx.StaticText( self, wx.ID_ANY, u"Tender Rate ($/hr)", wx.DefaultPosition, wx.DefaultSize, 0 )
+        #tenderRate_staticText.Wrap( -1 )
+        #self.fgSizer.Add( tenderRate_staticText, 0, wx.ALL, 5 )
         
         self.fgSizer.AddSpacer( ( 0, 0), 1, wx.EXPAND, 5 )
         
+        self.m_staticline16 = wx.StaticLine( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
+        self.bxSizer1.Add( self.m_staticline16, 0, wx.EXPAND |wx.ALL, 5 )
+        
+        self.tenderRate_staticText = wx.StaticText( self, wx.ID_ANY, u"Tending Rate ($/hr)", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.tenderRate_staticText.Wrap( -1 )
+        self.bxSizer1.Add( self.tenderRate_staticText, 0, wx.ALL, 5 )
+        
+        self.tenderRate_spinCtrl = wx.SpinCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 10, 40, 25 )
+        self.bxSizer1.Add( self.tenderRate_spinCtrl, 0, wx.ALL, 5 )
+        
+        fgs = wx.FlexGridSizer( 1, 2, 0, 0 )
+        fgs.SetFlexibleDirection( wx.BOTH )
+        fgs.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
+        self.bxSizer1.Add( fgs, 0, wx.ALIGN_CENTER_HORIZONTAL, 5 )
+        
         self.save_button = wx.Button( self, wx.ID_ANY, u"Save", wx.DefaultPosition, wx.DefaultSize, 0 )
-        self.bxSizer1.Add( self.save_button, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
-        
+        fgs.Add( self.save_button, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
         self.save_button.Bind(wx.EVT_BUTTON, self._evtSave)
-        self.Bind(wx.EVT_CLOSE, self._evtClose)
         
-    def addRow(self, Name="", Duty="Diver and Tender", DiveRate=45, TendRate=20):
+        self.cancel_button = wx.Button( self, wx.ID_ANY, u"Cancel", wx.DefaultPosition, wx.DefaultSize, 0 )
+        fgs.Add( self.cancel_button, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
+        self.cancel_button.Bind( wx.EVT_BUTTON, self._evtClose )
+        
+        self.Bind( wx.EVT_CLOSE, self._evtClose )
+        
+    def addRow(self, Name="", Duty="Diver and Tender", DiveRate=45, TendRate=25):
         #print 'adding row#', self.rowNumber
         name_textCtrl = wx.TextCtrl( self, wx.ID_ANY, Name, wx.DefaultPosition, wx.DefaultSize, 0 )
         self.fgSizer.Add( name_textCtrl, 0, wx.ALL, 5 )
@@ -638,9 +884,9 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         diveRate_spinCtrl.SetValue(DiveRate)
         self.fgSizer.Add( diveRate_spinCtrl, 0, wx.ALL, 5 )
         
-        tenderRate_spinCtrl = wx.SpinCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 10, 40, 20 )
-        tenderRate_spinCtrl.SetValue(TendRate)
-        self.fgSizer.Add( tenderRate_spinCtrl, 0, wx.ALL, 5 )
+        #tenderRate_spinCtrl = wx.SpinCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 10, 40, 20 )
+        #tenderRate_spinCtrl.SetValue(TendRate)
+        #self.fgSizer.Add( tenderRate_spinCtrl, 0, wx.ALL, 5 )
         
         delete_button = wx.Button( self, wx.ID_ANY, u"Delete", wx.DefaultPosition, wx.DefaultSize, 0 )
         self.fgSizer.Add( delete_button, 0, wx.ALL, 5 )
@@ -649,12 +895,13 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         self.Layout()
         self.bxSizer1.Fit( self )
         
-        self.rowStack.append([name_textCtrl, duty_choice, diveRate_spinCtrl, tenderRate_spinCtrl, delete_button])
+        #self.rowStack.append([name_textCtrl, duty_choice, diveRate_spinCtrl, tenderRate_spinCtrl, delete_button])
+        self.rowStack.append([name_textCtrl, duty_choice, diveRate_spinCtrl, delete_button])
         name_textCtrl.Bind( wx.EVT_TEXT, lambda evt, rownum=self.rowNumber: self._evtNameTxt(evt, rownum))
         duty_choice.Bind( wx.EVT_CHOICE, lambda evt, rownum=self.rowNumber: self._evtDuty(evt, rownum))
         delete_button.Bind( wx.EVT_BUTTON, lambda evt, rownum=self.rowNumber: self._evtDelete(evt, rownum))
         delete_button.Disable()
-        self.rowStack[self.rowNumber-1][4].Enable()
+        self.rowStack[self.rowNumber-1][3].Enable()
         self._evtDuty(None, self.rowNumber)
         self.rowNumber += 1
         
@@ -702,7 +949,7 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
             for each in self.rowStack[0:-1]:
                 if each is not None:
                     #print each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), each[3].GetValue()
-                    datastore.AddCrew(each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), each[3].GetValue())
+                    datastore.AddCrew(each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), self.tenderRate_spinCtrl.GetValue() )
             datastore.Close()
             frame.divepanel.updateDiverTenderChoice()
             frame.divepanel.diver_choice.SetSelection(0)
@@ -744,8 +991,8 @@ class DataPanel(GUI.DataPanel): #AUI PANEL
                 #frame.divepanel.long = unicode(long)
                 self.lat_staticText.SetLabel(unicode(lat))
                 self.long_staticText.SetLabel(unicode(lon))
-            bearing = frame.gps.fmt_bearing('M')
-            if bearing is not 'None':
+            bearing = frame.gps.fmt_bearing()
+            if bearing != 'None':
                 #frame.divepanel.bearing = unicode(bearing)
                 self.bearing_staticText.SetLabel(unicode(bearing))
             
@@ -756,7 +1003,9 @@ class DataPanel(GUI.DataPanel): #AUI PANEL
                 longitude = float ( lon.split('*')[0] )
                 if lon.split('*')[1] == 'W':
                     longitude = -longitude
-                heading = float ( bearing.split('*')[0] )
+                heading = float ( bearing.split('*')[0] )    
+                if bearing.split('*')[1] == 'M':
+                    heading += frame.divepanel.bearingVariance
                 #print latitude, longitude, heading
                 startLatitude = float( frame.divepanel.lat.split('*')[0] )
                 if frame.divepanel.lat.split('*')[1] == 'S':
@@ -775,6 +1024,7 @@ class DivePanel(GUI.DivePanel): #AUI PANEL frame.divepanel
         self.lat = '00.0000000*'
         self.long = '000.0000000*'
         self.bearing = '000.00*'
+        self.bearingVariance = 12.3
         self.notes = ''
         
         self.updateDiverTenderChoice()
@@ -862,7 +1112,7 @@ class DivePanel(GUI.DivePanel): #AUI PANEL frame.divepanel
                 if lat is not None and long is not None:
                     frame.divepanel.lat = unicode(lat)
                     frame.divepanel.long = unicode(long)
-                bearing = frame.gps.fmt_bearing('M')
+                bearing = frame.gps.fmt_bearing()
                 if bearing is not 'None':
                     frame.divepanel.bearing = unicode(bearing)
             #print 'Locking in coordinates', frame.divepanel.lat, frame.divepanel.long, frame.divepanel.bearing
@@ -1094,8 +1344,7 @@ class GridGridPanel( scrolled.ScrolledPanel ): #GRID STUFF
         self.bSizer.Add( self.grid, 0, wx.ALL, 5 )
         self.SetSizer( self.bSizer )
         self.SetAutoLayout(1)
-        self.SetupScrolling()
-        
+        self.SetupScrolling()        
 
 class GridPanel ( wx.Panel ): #END GRID STUFF
     def __init__( self, parent ):
@@ -1200,6 +1449,7 @@ class GridPanel ( wx.Panel ): #END GRID STUFF
         
     def _evtReport(self, evt):
         report = Report(None)
+        report.SetPosition( wx.Point(-1,0) )
         report.ShowModal()
         
     def _evtMap(self, evt):
@@ -1388,6 +1638,7 @@ def Main():
     
     global frame
     frame = AUIFrame(None)
+    frame.SetPosition( wx.Point(0,0) )
     frame.divepanel._evtDiverChoice() #force event to populate listbox if diver had dives on this date
     frame.datapanel.init()
     frame.grid.updateRoundChoices()

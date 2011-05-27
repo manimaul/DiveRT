@@ -108,8 +108,9 @@ class DataStore:
         return lst
     
     def GetTenderList(self, cleanupNumber=1):
-        t = (cleanupNumber,)
-        self.curs.execute('select distinct tenderName from dives where cleanupNumber=?', t)
+        t = (cleanupNumber,cleanupNumber)
+        #self.curs.execute('select distinct diverName, tenderName from dives where cleanupNumber=?', t)
+        self.curs.execute('select distinct(ans) from (select diverName as ans from dives where cleanupNumber=? union select tenderName as ans from dives where cleanupNumber=?)', t)
         lst = []
         for each in self.curs.fetchall():
             lst.append( each[0] )
@@ -214,10 +215,10 @@ class DataStore:
     def GetOzPerHour(self, cleanupNumber):
         self.curs.execute('select grams from cleanups where number=?', (cleanupNumber,) )
         fetch = self.curs.fetchone()
+        grams = 0.0
         if fetch is not None:
-            grams = float( fetch[0] )
-        else:
-            grams = 0.0
+            if fetch[0] != '':
+                grams = float( fetch[0] )
         troyOz = grams / 31.1034768
         hours = float( self.GetTotalHours(cleanupNumber) )
         if hours == 0.0:
@@ -391,6 +392,18 @@ class DataStore:
         table.append(row)       
         return table
     
+    def GetRoundDateRange(self, cleanupNumber=1):
+        t = (cleanupNumber,)
+        self.curs.execute( 'select distinct diveDate from dives where cleanupNumber=?', t)
+            
+        epochlst = []
+        for dates in self.curs.fetchall():
+            #print dates[0]
+            epochlst.append(time.mktime(time.strptime(dates[0], '%b %d %Y')))
+        firstday = time.strftime('%b, %d to ', time.localtime(min(epochlst)))
+        lastday = time.strftime('%b, %d %Y', time.localtime(max(epochlst)))
+        return firstday + lastday
+    
     def GetTotalHours(self, cleanupNumber):
         data = self.GetDataTable(cleanupNumber)
         hmstr = data[-1][-1]
@@ -465,8 +478,7 @@ if __name__=='__main__':
     DiveRTdbFile = 'C:\ProgramData\DiveRT\DiveRT.db'
     ds = DataStore(DiveRTdbFile)
     
-    for each in ds.GetKMLData():
-        print each
+    ds.GetRoundDateRange(1)
     
     ds.Close()
         

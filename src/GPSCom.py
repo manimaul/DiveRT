@@ -28,6 +28,7 @@ class gps():
         self.gsaCount = 0
         self.vtgCount = 0
         self.hdgCount = 0
+        self.hdtCount = 0
         self.data_sog = None #float from RMC
         self.data_cog = None #float from RMC
         self.data_date = None #string from RMC
@@ -169,6 +170,7 @@ class gps():
             print 'gsa count is', self.gsaCount
             print 'vtg count is', self.vtgCount
             print 'hdg count is', self.hdgCount
+            print 'hdt count is', self.hdtCount
         if self.rmcCount == 0:
             self.data_date = None #string from RMC
             self.data_decl = None #float from RMC
@@ -188,12 +190,15 @@ class gps():
             self.data_sats = None #int from GGA, GSA
             self.data_hdop = None #float from GGA, GSA
         if self.hdgCount == 0:
-            self.data_bearingMagnetic = None #float from HDG
+            self.data_bearingMagnetic = None #string from HDG
+        if self.hdtCount == 0:
+            self.data_bearingTrue = None #string from HDT
         self.rmcCount = 0
         self.ggaCount = 0
         self.gsaCount = 0
         self.vtgCount = 0
         self.hdgCount = 0
+        self.hdtCount = 0
         if self.alive.isSet() and not self.freshF.isAlive():
             self.freshF.start()
     
@@ -215,6 +220,8 @@ class gps():
             self.vtg(line)
         if self.sentencID(line) == 'HDG':
             self.hdg(line)
+        if self.sentencID(line) == 'HDT':
+            self.hdt(line)
     
     def close(self):
         self.alive.clear()
@@ -507,22 +514,32 @@ class gps():
                 alt = str(alt) + ' FEET'
             return alt.encode('utf-8')
     
-    def fmt_bearing(self, fmt='M'):
+    def fmt_bearing(self):
         bearing = 'None'
-        if self.data_bearingMagnetic is not None and fmt == 'M':
+        if self.data_bearingMagnetic is not None:
             bearing = str(self.data_bearingMagnetic) + '*M'
+        if self.data_bearingTrue is not None:
+            bearing = str(self.data_bearingTrue) + '*T'
         return bearing.encode('utf-8')
         
     def hdg(self,line):
-        '''
-           self.data_bearingMagnetic - string
-        '''
+        '''self.data_bearingMagnetic - string'''
         line = line.split(',')
         try:
             self.data_bearingMagnetic = line[1]
             self.hdgCount += 1
         except:
             print 'hdg - GPS sending malformed data:'
+            print line
+            
+    def hdt(self,line):
+        '''self.data_bearingTrue - string'''
+        line = line.split(',')
+        try:
+            self.data_bearingTrue = line[1]
+            self.hdtCount += 1
+        except:
+            print 'hdt - GPS sending malformed data:'
             print line
     
     def rmc(self, line): #data instance is in the MainWindow class
@@ -725,7 +742,7 @@ class gps():
 
 if __name__== "__main__":
     FILE = 'C:\\Documents and Settings\\User\\appdata\\local\\WinGippy\\recordings\\GPS_RECORDING_2.txt'
-    COM = 'COM1'
+    COM = 'COM9'
     BAUD = 38400
     #GPS = gps(COM, BAUD, .5)
     GPS = gps(COM, BAUD)
@@ -736,8 +753,8 @@ if __name__== "__main__":
       
     while GPS.alive.isSet():
         #print GPS.rxline()
-        print GPS.data_bearingMagnetic
+        #print GPS.data_bearingMagnetic
         print GPS.fmt_lat('DDD'), GPS.fmt_lon('DDD')
-        print GPS.fmt_bearing('M')
+        print GPS.fmt_bearing()
         print GPS.fmt_multistatus()
         sleep(1)
