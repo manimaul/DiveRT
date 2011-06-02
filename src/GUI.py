@@ -546,6 +546,44 @@ class EditDlg ( wx.Dialog ):
 	
 
 ###########################################################################
+## Class MsgDialog
+###########################################################################
+
+class MsgDialog ( wx.Dialog ):
+	
+	def __init__( self, parent ):
+		wx.Dialog.__init__ ( self, parent, id = wx.ID_ANY, title = u"Message", pos = wx.DefaultPosition, size = wx.DefaultSize, style = wx.CAPTION )
+		
+		self.SetSizeHintsSz( wx.DefaultSize, wx.DefaultSize )
+		
+		self.bSizer = wx.BoxSizer( wx.VERTICAL )
+		
+		self.msg_staticText = wx.StaticText( self, wx.ID_ANY, u"Message", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.msg_staticText.Wrap( -1 )
+		self.bSizer.Add( self.msg_staticText, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
+		
+		self.m_button13 = wx.Button( self, wx.ID_ANY, u"Ok", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.bSizer.Add( self.m_button13, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
+		
+		self.SetSizer( self.bSizer )
+		self.Layout()
+		self.bSizer.Fit( self )
+		
+		self.Centre( wx.BOTH )
+		
+		# Connect Events
+		self.m_button13.Bind( wx.EVT_BUTTON, self._evtOK )
+	
+	def __del__( self ):
+		pass
+	
+	
+	# Virtual event handlers, overide them in your derived class
+	def _evtOK( self, event ):
+		event.Skip()
+	
+
+###########################################################################
 ## Class ConfirmDlg
 ###########################################################################
 
@@ -556,11 +594,11 @@ class ConfirmDlg ( wx.Dialog ):
 		
 		self.SetSizeHintsSz( wx.DefaultSize, wx.DefaultSize )
 		
-		bSizer5 = wx.BoxSizer( wx.VERTICAL )
+		self.bSizer = wx.BoxSizer( wx.VERTICAL )
 		
 		self.message = wx.StaticText( self, wx.ID_ANY, u"Are you sure you would like to delete this?", wx.DefaultPosition, wx.DefaultSize, 0 )
 		self.message.Wrap( -1 )
-		bSizer5.Add( self.message, 0, wx.ALL, 5 )
+		self.bSizer.Add( self.message, 0, wx.ALL, 5 )
 		
 		gSizer2 = wx.GridSizer( 2, 2, 0, 0 )
 		
@@ -570,11 +608,11 @@ class ConfirmDlg ( wx.Dialog ):
 		self.yesButton = wx.Button( self, wx.ID_ANY, u"Yes", wx.DefaultPosition, wx.DefaultSize, 0 )
 		gSizer2.Add( self.yesButton, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
 		
-		bSizer5.Add( gSizer2, 1, wx.EXPAND, 5 )
+		self.bSizer.Add( gSizer2, 0, wx.ALIGN_CENTER_HORIZONTAL, 5 )
 		
-		self.SetSizer( bSizer5 )
+		self.SetSizer( self.bSizer )
 		self.Layout()
-		bSizer5.Fit( self )
+		self.bSizer.Fit( self )
 		
 		self.Centre( wx.BOTH )
 		
@@ -601,7 +639,7 @@ class ConfirmDlg ( wx.Dialog ):
 class GPSSettings ( wx.Dialog ):
 	
 	def __init__( self, parent ):
-		wx.Dialog.__init__ ( self, parent, id = wx.ID_ANY, title = u"GPS Settings", pos = wx.DefaultPosition, size = wx.DefaultSize, style = wx.DEFAULT_DIALOG_STYLE )
+		wx.Dialog.__init__ ( self, parent, id = wx.ID_ANY, title = u"GPS Settings", pos = wx.DefaultPosition, size = wx.DefaultSize, style = wx.CAPTION )
 		
 		self.SetSizeHintsSz( wx.DefaultSize, wx.DefaultSize )
 		
@@ -725,8 +763,8 @@ class CrewManager ( wx.Dialog ):
 		self.tenderRate_staticText.Wrap( -1 )
 		bSizer11.Add( self.tenderRate_staticText, 0, wx.ALL, 5 )
 		
-		self.tenderRate_spinCtrl = wx.SpinCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 10, 40, 25 )
-		bSizer11.Add( self.tenderRate_spinCtrl, 0, wx.ALL, 5 )
+		self.tenderRate_textCtrl = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+		bSizer11.Add( self.tenderRate_textCtrl, 0, wx.ALL, 5 )
 		
 		bxSizer.Add( bSizer11, 0, 0, 5 )
 		
@@ -744,6 +782,7 @@ class CrewManager ( wx.Dialog ):
 		
 		# Connect Events
 		self.name_textCtrl.Bind( wx.EVT_TEXT, self._evtNameTxt )
+		self.tenderRate_textCtrl.Bind( wx.EVT_TEXT, self._evtTendRate )
 		self.save_button.Bind( wx.EVT_BUTTON, self._evtSave )
 	
 	def __del__( self ):
@@ -752,6 +791,9 @@ class CrewManager ( wx.Dialog ):
 	
 	# Virtual event handlers, overide them in your derived class
 	def _evtNameTxt( self, event ):
+		event.Skip()
+	
+	def _evtTendRate( self, event ):
 		event.Skip()
 	
 	def _evtSave( self, event ):
@@ -771,7 +813,7 @@ class About ( wx.Dialog ):
 		
 		bSizer12 = wx.BoxSizer( wx.VERTICAL )
 		
-		self.m_staticText40 = wx.StaticText( self, wx.ID_ANY, u"Dive RT v1.02", wx.DefaultPosition, wx.DefaultSize, 0 )
+		self.m_staticText40 = wx.StaticText( self, wx.ID_ANY, u"Dive RT v1.03", wx.DefaultPosition, wx.DefaultSize, 0 )
 		self.m_staticText40.Wrap( -1 )
 		self.m_staticText40.SetFont( wx.Font( 12, 70, 90, 92, False, wx.EmptyString ) )
 		

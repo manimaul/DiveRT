@@ -144,7 +144,7 @@ class DataStore:
         self.curs.execute('select tendrate from crew where name=?', (tenderName,) )
         rate = self.curs.fetchone()
         if rate is not None:
-            return int(rate[0])
+            return float(rate[0])
         else:
             return defaultRate
     
@@ -400,9 +400,12 @@ class DataStore:
         for dates in self.curs.fetchall():
             #print dates[0]
             epochlst.append(time.mktime(time.strptime(dates[0], '%b %d %Y')))
-        firstday = time.strftime('%b, %d to ', time.localtime(min(epochlst)))
-        lastday = time.strftime('%b, %d %Y', time.localtime(max(epochlst)))
-        return firstday + lastday
+        if epochlst.__len__() > 0:
+            firstday = time.strftime('%b, %d to ', time.localtime(min(epochlst)))
+            lastday = time.strftime('%b, %d %Y', time.localtime(max(epochlst)))
+            return firstday + lastday
+        else:
+            return ''
     
     def GetTotalHours(self, cleanupNumber):
         data = self.GetDataTable(cleanupNumber)
@@ -478,7 +481,7 @@ if __name__=='__main__':
     DiveRTdbFile = 'C:\ProgramData\DiveRT\DiveRT.db'
     ds = DataStore(DiveRTdbFile)
     
-    ds.GetRoundDateRange(1)
+    print ds.GetTotalHours(1)
     
     ds.Close()
         

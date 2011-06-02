@@ -80,7 +80,7 @@ class diveRTKml():
           <heading>%s</heading>
           <scale>1</scale>
           <Icon>
-            <href>C:\\ProgramData\\DiveRT\\icons\\arrowship.png</href>
+            <href>C:\\ProgramData\\DiveRT\\icons\\%sship.png</href>
           </Icon>
         </IconStyle>
         <BalloonStyle>
@@ -104,7 +104,7 @@ class diveRTKml():
           <heading>%s</heading>
           <scale>1</scale>
           <Icon>
-            <href>C:\\ProgramData\\DiveRT\\icons\\arrowstart.png</href>
+            <href>C:\\ProgramData\\DiveRT\\icons\\%sstart.png</href>
           </Icon>
         </IconStyle>
         <BalloonStyle>
@@ -161,9 +161,9 @@ class diveRTKml():
             self.diveFolders += "</Folder>\n"
         ds.Close()
     
-    def compileLocationFolders(self, heading, long, lat, startHeading, startLong, startLat):
+    def compileLocationFolders(self, heading, long, lat, startHeading, startLong, startLat, icon="arrow"):
         #print 'compiloing location folder for kml'
-        self.locationFolders = self._locationFolders %( str(heading), str(long), str(lat), str(startHeading), str(startLong), str(startLat) )
+        self.locationFolders = self._locationFolders %( str(heading), icon, str(long), str(lat), str(startHeading), icon, str(startLong), str(startLat) )
         
     
     def writeKmlToServer(self):

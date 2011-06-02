@@ -31,6 +31,34 @@ class ConfirmDlg(GUI.ConfirmDlg): #POPUP WINDOW
     
     def _evtCancel(self, evt):
         self.Destroy()
+        
+class MsgDialog(GUI.MsgDialog): #POPUP DIALOG
+    def changeMessage(self, msg=u"Message"):
+        self.msg_staticText.SetLabel( msg )
+        self.SetSizer( self.bSizer )
+        self.Layout()
+        self.bSizer.Fit( self )
+        
+    def _evtOK(self, evt):
+        evt.Skip()
+        self.Destroy()
+        
+class SimpleConfirmDlg(GUI.ConfirmDlg): #POPUP DIALOG
+    def changeMessage(self, msg=u"Are you sure?"):
+        self.message.SetLabel( msg )
+        self.SetSizer( self.bSizer )
+        self.Layout()
+        self.bSizer.Fit( self )
+        
+    def _evtYes(self, evt):
+        self.Parent.flag = True
+        evt.Skip()
+        self.Destroy()
+        
+    def _evtCancel(self, evt):
+        self.Parent.flag = False
+        evt.Skip()
+        self.Destroy()
 
 class EditDlg(GUI.EditDlg): #POPUP WINDOW
     def _evtHr(self, evt):
@@ -411,7 +439,11 @@ class Report(GUI.RoundReport): #POPUP WINDOW
         tenderpay_textCtrl.SetValue( "$" + str(pay) )
             
     def updateDiverRows(self):
-        totalGrams = float( self.totalGrams_textCtrl.GetValue() )
+        gramstr = self.totalGrams_textCtrl.GetValue()
+        if gramstr != '':
+            totalGrams = float( gramstr )
+        else:
+            totalGrams = 0
         diverGrams = 0
         for row in self.diverRows:
             self._evtDiverPercentSet(row[0], row[1], row[2], row[3] )
@@ -819,7 +851,9 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         datastore = Sql.DataStore(DiveRTdbFile)
         crewlist = datastore.GetCrewList()
         for each in crewlist:
-            self.addRow(each[1], each[2], int(each[3]), int(each[4]))
+            self.addRow( each[1], each[2], int(each[3]) )
+            tendRate = each[4]
+        self.tenderRate_textCtrl.SetValue(tendRate)
         #print crewlist
         datastore.Close()
         self.addRow()
@@ -839,10 +873,6 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         diveRate_staticText.Wrap( -1 )
         self.fgSizer.Add( diveRate_staticText, 0, wx.ALL, 5 )
         
-        #tenderRate_staticText = wx.StaticText( self, wx.ID_ANY, u"Tender Rate ($/hr)", wx.DefaultPosition, wx.DefaultSize, 0 )
-        #tenderRate_staticText.Wrap( -1 )
-        #self.fgSizer.Add( tenderRate_staticText, 0, wx.ALL, 5 )
-        
         self.fgSizer.AddSpacer( ( 0, 0), 1, wx.EXPAND, 5 )
         
         self.m_staticline16 = wx.StaticLine( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
@@ -852,8 +882,8 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         self.tenderRate_staticText.Wrap( -1 )
         self.bxSizer1.Add( self.tenderRate_staticText, 0, wx.ALL, 5 )
         
-        self.tenderRate_spinCtrl = wx.SpinCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 10, 40, 25 )
-        self.bxSizer1.Add( self.tenderRate_spinCtrl, 0, wx.ALL, 5 )
+        self.tenderRate_textCtrl = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.bxSizer1.Add( self.tenderRate_textCtrl, 0, wx.ALL, 5)
         
         fgs = wx.FlexGridSizer( 1, 2, 0, 0 )
         fgs.SetFlexibleDirection( wx.BOTH )
@@ -869,8 +899,9 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         self.cancel_button.Bind( wx.EVT_BUTTON, self._evtClose )
         
         self.Bind( wx.EVT_CLOSE, self._evtClose )
+        self.Bind( wx.EVT_TEXT, self._evtTendRateTxt )
         
-    def addRow(self, Name="", Duty="Diver and Tender", DiveRate=45, TendRate=25):
+    def addRow(self, Name="", Duty="Diver and Tender", DiveRate=45):
         #print 'adding row#', self.rowNumber
         name_textCtrl = wx.TextCtrl( self, wx.ID_ANY, Name, wx.DefaultPosition, wx.DefaultSize, 0 )
         self.fgSizer.Add( name_textCtrl, 0, wx.ALL, 5 )
@@ -884,10 +915,6 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         diveRate_spinCtrl.SetValue(DiveRate)
         self.fgSizer.Add( diveRate_spinCtrl, 0, wx.ALL, 5 )
         
-        #tenderRate_spinCtrl = wx.SpinCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 10, 40, 20 )
-        #tenderRate_spinCtrl.SetValue(TendRate)
-        #self.fgSizer.Add( tenderRate_spinCtrl, 0, wx.ALL, 5 )
-        
         delete_button = wx.Button( self, wx.ID_ANY, u"Delete", wx.DefaultPosition, wx.DefaultSize, 0 )
         self.fgSizer.Add( delete_button, 0, wx.ALL, 5 )
         
@@ -895,7 +922,6 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         self.Layout()
         self.bxSizer1.Fit( self )
         
-        #self.rowStack.append([name_textCtrl, duty_choice, diveRate_spinCtrl, tenderRate_spinCtrl, delete_button])
         self.rowStack.append([name_textCtrl, duty_choice, diveRate_spinCtrl, delete_button])
         name_textCtrl.Bind( wx.EVT_TEXT, lambda evt, rownum=self.rowNumber: self._evtNameTxt(evt, rownum))
         duty_choice.Bind( wx.EVT_CHOICE, lambda evt, rownum=self.rowNumber: self._evtDuty(evt, rownum))
@@ -925,10 +951,34 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         else:
             rowobjlst[2].Disable()
     
+    def floatstr(self, somestring):
+        mystr = ''
+        decimal = False
+        for each in somestring:
+            srch = re.search(r'\d', each)
+            if srch is not None:
+                mystr += srch.group(0)
+            srch = re.search(r'\.', each)
+            if srch is not None and decimal is False:
+                mystr += srch.group(0)
+                decimal = True
+        return mystr
+    
     def _evtNameTxt(self, evt, rownum):
         #print 'typing in: ', rownum
         if rownum == self.rowNumber - 1:
             self.addRow()
+            
+    def _evtTendRateTxt(self, evt):
+        #only allow numbers and  one decimal
+        ctrl = evt.GetEventObject()
+        value = ctrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            ctrl.SetValue(newval)
+            ctrl.SetInsertionPointEnd()
+        if newval != '':
+            ctrl.SetInsertionPointEnd()
             
     def _evtDelete(self, evt, rownum):
         self.deleteRow(rownum)
@@ -943,13 +993,13 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
                 else:
                     condition2 = False #empty name found
                     
-        if condition1 and condition2:
+        if condition1 and condition2 and (self.tenderRate_textCtrl.GetValue() != ""):
             datastore = Sql.DataStore(DiveRTdbFile)
             datastore.DropCrewData()
             for each in self.rowStack[0:-1]:
                 if each is not None:
                     #print each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), each[3].GetValue()
-                    datastore.AddCrew(each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), self.tenderRate_spinCtrl.GetValue() )
+                    datastore.AddCrew(each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), self.tenderRate_textCtrl.GetValue() )
             datastore.Close()
             frame.divepanel.updateDiverTenderChoice()
             frame.divepanel.diver_choice.SetSelection(0)
@@ -996,26 +1046,35 @@ class DataPanel(GUI.DataPanel): #AUI PANEL
                 #frame.divepanel.bearing = unicode(bearing)
                 self.bearing_staticText.SetLabel(unicode(bearing))
             
-            if ( lat != None ) == ( lon != None ) == ( bearing != None ):  
+            #generate kml current and start positions
+            if ( lat != None ) and ( lon != None ):
                 latitude = float( lat.split('*')[0] )
                 if lat.split('*')[1] == 'S':
                     latitude = -latitude
                 longitude = float ( lon.split('*')[0] )
                 if lon.split('*')[1] == 'W':
                     longitude = -longitude
-                heading = float ( bearing.split('*')[0] )    
-                if bearing.split('*')[1] == 'M':
-                    heading += frame.divepanel.bearingVariance
-                #print latitude, longitude, heading
+                if bearing == 'None':
+                    shipIcon = "circle"
+                    heading = 0.0
+                else:
+                    heading = float ( bearing.split('*')[0] )
+                    shipIcon ="arrow"    
+                    if bearing.split('*')[1] == 'M':
+                        heading += frame.divepanel.bearingVariance
+                    #print latitude, longitude, heading
                 startLatitude = float( frame.divepanel.lat.split('*')[0] )
                 if frame.divepanel.lat.split('*')[1] == 'S':
                     startLatitude = -startLatitude
                 startLongitude = float ( frame.divepanel.long.split('*')[0] )
                 if frame.divepanel.long.split('*')[1] == 'W':
                     startLongitude = -startLongitude
-                startHeading = float ( frame.divepanel.bearing.split('*')[0] )
+                if frame.divepanel.bearing != 'None':
+                    startHeading = float ( frame.divepanel.bearing.split('*')[0] )
+                else:
+                    startHeading = 0.0
                 #print frame.divepanel.lat, frame.divepanel.long, frame.divepanel.bearing
-                diveKml.compileLocationFolders( heading, longitude, latitude, startHeading, startLongitude, startLatitude)
+                diveKml.compileLocationFolders( heading, longitude, latitude, startHeading, startLongitude, startLatitude, shipIcon)
                 diveKml.writeKmlToServer()
         frame.divepanel.CalcTimeUW()
 
@@ -1431,15 +1490,22 @@ class GridPanel ( wx.Panel ): #END GRID STUFF
         global CleanupRound
         
         if self.newRound_button.GetLabel() == u"Start New Round":
-            ds = Sql.DataStore(DiveRTdbFile)
-            CleanupRound = ds.GetLastCleanupRound()+1
-            if self.cround_choice.GetItems().count(str(CleanupRound)) == 0:
-                self.cround_choice.Append(str(CleanupRound))
-            self.cround_choice.SetSelection(CleanupRound-1)
-            self._evtRoundChange()
-            ds.Close()
-            if self.cround_choice.GetSelection() == self.cround_choice.GetItems().__len__()-1:
-                self.newRound_button.SetLabel( u"Cancel New Round")
+            self.flag = False
+            confirm = SimpleConfirmDlg(self)
+            confirm.changeMessage( u"Are you sure you want to start a new dive round?" )
+            confirm.ShowModal()
+            while confirm.IsModal():
+                wx.Sleep(.1)
+            if self.flag:
+                ds = Sql.DataStore(DiveRTdbFile)
+                CleanupRound = ds.GetLastCleanupRound()+1
+                if self.cround_choice.GetItems().count(str(CleanupRound)) == 0:
+                    self.cround_choice.Append(str(CleanupRound))
+                self.cround_choice.SetSelection(CleanupRound-1)
+                self._evtRoundChange()
+                ds.Close()
+                if self.cround_choice.GetSelection() == self.cround_choice.GetItems().__len__()-1:
+                    self.newRound_button.SetLabel( u"Cancel New Round")
         else:
             CleanupRound = CleanupRound - 1
             self.cround_choice.Delete( CleanupRound )
@@ -1448,9 +1514,17 @@ class GridPanel ( wx.Panel ): #END GRID STUFF
             self.newRound_button.SetLabel( u"Start New Round")
         
     def _evtReport(self, evt):
-        report = Report(None)
-        report.SetPosition( wx.Point(-1,0) )
-        report.ShowModal()
+        check = False
+        ds = Sql.DataStore(DiveRTdbFile)
+        if ds.GetTotalHours( CleanupRound ) != "0.0":
+            report = Report(None)
+            report.SetPosition( wx.Point(-1,0) )
+            report.ShowModal()
+        else:
+            msgDlg = MsgDialog( self )
+            msgDlg.changeMessage( u"There is zero dive time in this round. \n Report is not available.")
+            msgDlg.ShowModal()
+        ds.Close()
         
     def _evtMap(self, evt):
         #look for google earth
