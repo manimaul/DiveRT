@@ -899,7 +899,7 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         self.cancel_button.Bind( wx.EVT_BUTTON, self._evtClose )
         
         self.Bind( wx.EVT_CLOSE, self._evtClose )
-        self.Bind( wx.EVT_TEXT, self._evtTendRateTxt )
+        self.tenderRate_textCtrl.Bind( wx.EVT_TEXT, self._evtTendRateTxt )
         
     def addRow(self, Name="", Duty="Diver and Tender", DiveRate=45):
         #print 'adding row#', self.rowNumber
