@@ -359,100 +359,103 @@ class Report(GUI.RoundReport): #POPUP WINDOW
         self.totaltime = ds.GetTotalHours(CleanupRound)
         self.totalHours_textCtrl.SetValue(self.totaltime)
         
-        diverlist = ds.GetDiverList(CleanupRound)
+        ##extra diver ... ladies firt
+        exDiverLst = ds.GetExtraDiverList(CleanupRound)
         diverhours = ds.GetCleanupTotals(CleanupRound)
         #get default diver percentages here... will be updated later if cleanup/round has saved data
-        diverrates = ds.GetDiverRates(diverlist)
+        diverrates = ds.GetDiverRates(exDiverLst)
         
         #now get saved diver percentages
         savedDiverRates = ds.GetReportDiverDetails(CleanupRound)
         comparelst = savedDiverRates.keys()
         comparelst.reverse()
-        if comparelst == diverlist:
+        if comparelst == exDiverLst:
             #print 'retrieving saved diver rates'
             diverrates = savedDiverRates
         
         self.diverRows = []
-        for diver in diverlist:
-            self.addDiverRow(diver, diverhours[diver], diverrates[diver])
+        self.exDiverRows = []
+        for diver in exDiverLst:
+            self.addExDiverRow(diver, diverhours[diver], diverrates[diver])
+        if exDiverLst.__len__() == 0:
+            self.extraDiver_staticline.Hide()
+            self.extraDiver_staticText.Hide()
+            self.exName_staticText.Hide()
+            self.exHours_staticText.Hide()
+            self.exPay_staticText.Hide()
+            self.exGrams_staticText.Hide()
+            self.exValue_staticText.Hide()
+            #self.extraDiving_fgSizer.Hide()
+        
+        #operator / divers    
+        diverLst = ds.GetOperatorDiverList(CleanupRound)
+        for diver in diverLst:
+            self.addDiverRow(diver, diverhours[diver])
         
         #get any saved data
         data = ds.GetReportTotals(CleanupRound)
         if data is not None:
             self.totalGrams_textCtrl.SetValue(data[1])
+            self._evtSetTroyOz( None, data[1] )
             self.londonSpot_textCtrl.SetValue(data[2])
             self.percentLoss_textCtrl.SetValue(data[3])
         
         #self.SetEstTotal()
-        self.updateDiverRows()
-        
-        ##tender info
-        tenderlist = ds.GetTenderList(CleanupRound)
-        self.tenderRows = []
-        for name in tenderlist:
-            hrs = ds.GetTendingHours(CleanupRound, name)
-            rate = ds.GetTenderRate(name)
-            pay = round ( ( hrs * rate ), 2 )
-            self.addTenderRow(name, str(hrs), str(rate), "$" + str(pay))
+        self.updateCuts()
             
         ds.Close()
         
         self.bSizer.Fit( self )
         self.Layout()
     
-    def addTenderRow(self, name, hours, rate, pay):
-        tendername_textCtrl = wx.TextCtrl( self, wx.ID_ANY, name, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
-        tendername_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
-        self.tending_fgSizer.Add( tendername_textCtrl, 0, wx.ALL, 5 )
-        
-        tenderhours_textCtrl = wx.TextCtrl( self, wx.ID_ANY, hours, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
-        tenderhours_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
-        self.tending_fgSizer.Add( tenderhours_textCtrl, 0, wx.ALL, 5 )
-        
-        tenderrate_textCtrl = wx.TextCtrl( self, wx.ID_ANY, rate, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
-        tenderrate_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
-        self.tending_fgSizer.Add( tenderrate_textCtrl, 0, wx.ALL, 5 )
-        
-        tenderpay_textCtrl = wx.TextCtrl( self, wx.ID_ANY, pay, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
-        tenderpay_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
-        self.tending_fgSizer.Add( tenderpay_textCtrl, 0, wx.ALL, 5 )
-        
-        tenderrate_textCtrl.Bind( wx.EVT_TEXT, lambda evt, h=tenderhours_textCtrl, r=tenderrate_textCtrl, p=tenderpay_textCtrl : self._evtTenderRateSet(h, r, p, evt) )
-        
-        self.tenderRows.append( (tenderhours_textCtrl, tenderrate_textCtrl, tenderpay_textCtrl, tendername_textCtrl) )
-        
-    def _evtTenderRateSet(self, tenderhours_textCtrl, tenderrate_textCtrl, tenderpay_textCtrl, evt=None):
-        val = tenderrate_textCtrl.GetValue()
-        newval = self.floatstr(val)
-        if newval != val:
-            tenderrate_textCtrl.SetValue(newval)
-            tenderrate_textCtrl.SetInsertionPointEnd()
-        if newval == "":
-            newval = 0.0
-        hrs = float( tenderhours_textCtrl.GetValue() )
-        r = tenderrate_textCtrl.GetValue()
-        if r == "":
-            rate = 0
-        else:
-            rate = float( r )
-        pay = round ( (hrs * rate), 2 )
-        tenderpay_textCtrl.SetValue( "$" + str(pay) )
-            
-    def updateDiverRows(self):
+    def updateCuts(self):
         gramstr = self.totalGrams_textCtrl.GetValue()
         if gramstr != '':
             totalGrams = float( gramstr )
         else:
-            totalGrams = 0
-        diverGrams = 0
-        for row in self.diverRows:
+            totalGrams = 0.0
+        
+        ownerPct = self.ownerPercent_textCtrl.GetValue()
+        if ownerPct == "":
+            ownergrams = 0.0
+        else:
+            ownergrams = totalGrams * ( float(ownerPct) / 100 )
+        self.ownerGrams_textCtrl.SetValue( str( ownergrams ) )
+        self.ownerEstimate_textCtrl.SetValue( self.grams2EstDollars(ownergrams) )
+        
+        operPct = self.operatorPercent_textCtrl.GetValue()
+        if operPct == "":
+            operatorgrams = 0.0
+        else:
+            operatorgrams = totalGrams * ( float(operPct) / 100 )
+        self.operatorGrams_textCtrl.SetValue( str( operatorgrams ) )
+        self.operatorEstimate_textCtrl.SetValue( self.grams2EstDollars( operatorgrams ) )
+        
+        #extra diver rows
+        diverGrams = 0.0
+        for row in self.exDiverRows:
             self._evtDiverPercentSet(row[0], row[1], row[2], row[3] )
             diverGrams += float( row[2].GetValue() )
-        grams = totalGrams - diverGrams
-        self.remainder_textCtrl.SetValue( str(grams) )
-        self.remainderEstVal_textCtrl.SetValue( self.grams2EstDollars(grams) )
+            
+        #set net grams
+        net = float( self.operatorGrams_textCtrl.GetValue() ) - diverGrams
+        self.operNetGrams_textCtrl.SetValue( str( net ) )
         
-    def addDiverRow(self, name, hours, percent):
+        #operator diver times
+        operatorHrs = 0.0
+        for row in self.diverRows:
+            operatorHrs += float( row[0].GetValue() )
+        for row in self.diverRows:
+            pct = float( row[0].GetValue() ) / operatorHrs
+            dgrams = round(pct*net, 3)
+            row[1].SetValue( str( dgrams ) )
+            row[2].SetValue( self.grams2EstDollars( dgrams) )
+        
+        #set oz per hr
+        ozPerHr = round( (self.grams2TroyOz(totalGrams) / float( self.totalHours_textCtrl.GetValue() )), 2 )
+        self.ozPerHr_textCtrl.SetValue( str(ozPerHr) )
+        
+    def addDiverRow(self, name, hours):
         divername_textCtrl = wx.TextCtrl( self, wx.ID_ANY, name, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
         divername_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
         self.diving_fgSizer.Add( divername_textCtrl, 0, wx.ALL, 5 )
@@ -461,9 +464,6 @@ class Report(GUI.RoundReport): #POPUP WINDOW
         diverhours_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
         self.diving_fgSizer.Add( diverhours_textCtrl, 0, wx.ALL, 5 )
         
-        diverperct_textCtrl = wx.TextCtrl( self, wx.ID_ANY, percent, wx.DefaultPosition, wx.DefaultSize, 0 )
-        self.diving_fgSizer.Add( diverperct_textCtrl, 0, wx.ALL, 5 )
-        
         diverpay_textCtrl = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
         diverpay_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
         self.diving_fgSizer.Add( diverpay_textCtrl, 0, wx.ALL, 5 )
@@ -471,10 +471,32 @@ class Report(GUI.RoundReport): #POPUP WINDOW
         payvalue_textCtrl = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
         payvalue_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
         self.diving_fgSizer.Add( payvalue_textCtrl, 0, wx.ALL, 5)
+                
+        self.diverRows.append( (diverhours_textCtrl, diverpay_textCtrl, payvalue_textCtrl, divername_textCtrl) )
+    
+    def addExDiverRow(self, name, hours, percent):
+        divername_textCtrl = wx.TextCtrl( self, wx.ID_ANY, name, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        divername_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( divername_textCtrl, 0, wx.ALL, 5 )
+        
+        diverhours_textCtrl = wx.TextCtrl( self, wx.ID_ANY, hours, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diverhours_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( diverhours_textCtrl, 0, wx.ALL, 5 )
+        
+        diverperct_textCtrl = wx.TextCtrl( self, wx.ID_ANY, percent, wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.extraDiving_fgSizer.Add( diverperct_textCtrl, 0, wx.ALL, 5 )
+        
+        diverpay_textCtrl = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diverpay_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( diverpay_textCtrl, 0, wx.ALL, 5 )
+        
+        payvalue_textCtrl = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        payvalue_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( payvalue_textCtrl, 0, wx.ALL, 5)
         
         diverperct_textCtrl.Bind( wx.EVT_TEXT, lambda evt, h=diverhours_textCtrl, p=diverperct_textCtrl, g=diverpay_textCtrl, e=payvalue_textCtrl, : self._evtDiverPercentSet(h, p, g, e, evt))
         
-        self.diverRows.append( (diverhours_textCtrl, diverperct_textCtrl, diverpay_textCtrl, payvalue_textCtrl, divername_textCtrl) )
+        self.exDiverRows.append( (diverhours_textCtrl, diverperct_textCtrl, diverpay_textCtrl, payvalue_textCtrl, divername_textCtrl) )
         
     def _evtDiverPercentSet(self, diverhours_textCtrl, diverperct_textCtrl, diverpay_textCtrl, payvalue_textCtrl, evt=None ):
         val = diverperct_textCtrl.GetValue()
@@ -547,17 +569,79 @@ class Report(GUI.RoundReport): #POPUP WINDOW
                 decimal = True
         return mystr
         
-    def _evtTotalGramsChange(self, evt):
-        #only allow numbers and  one decimal
-        value = self.totalGrams_textCtrl.GetValue()
+    def _evtOwnerCut(self, evt):
+        ctrl = evt.GetEventObject()
+        value = ctrl.GetValue()
         newval = self.floatstr(value)
         if newval != value:
-            self.totalGrams_textCtrl.SetValue(newval)
-            self.totalGrams_textCtrl.SetInsertionPointEnd()
+            ctrl.SetValue(newval)
+            ctrl.SetInsertionPointEnd()
+        if newval != '':
+            pct = float(newval)
+            if pct > 100:
+                pct = 100
+                ctrl.SetValue( '100' )
+                ctrl.SetInsertionPointEnd()
+            self.operatorPercent_textCtrl.SetValue( str( 100 - pct ) )
+        self.updateCuts()
+            
+    def _evtOperatorCut(self, evt):
+        ctrl = evt.GetEventObject()
+        value = ctrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            ctrl.SetValue(newval)
+            ctrl.SetInsertionPointEnd()
+        if newval != '':
+            pct = float(newval)
+            if pct > 100:
+                pct = 100
+                ctrl.SetValue( '100' )
+                ctrl.SetInsertionPointEnd()
+            self.ownerPercent_textCtrl.SetValue( str( 100 - pct ) )
+        self.updateCuts()     
+    
+    def _evtGramsChange(self, evt):
+        ctrl = evt.GetEventObject()
+        #only allow numbers and  one decimal
+        value = ctrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            ctrl.SetValue(newval)
+            ctrl.SetInsertionPointEnd()
+        self._evtSetTroyOz( None, newval )
         #recalculate Estimated Total Value
         self.SetEstTotal()
         #recalculate each divers pay and dredge owner's total
-        self.updateDiverRows()        
+        self.updateCuts()
+        
+    def _evtSetTroyOz(self, evt=None, grams=None):
+        if evt != None:
+            grams = self.totalGrams_textCtrl.GetValue()
+        if grams != '':
+            troyOz = round( (float( grams ) / 31.1034768), 3 )
+            self.totalOz_textCtrl.SetValue( str(troyOz) )
+    
+    def _evtTozChange(self, evt):
+        ctrl = evt.GetEventObject()        
+        #only allow numbers and  one decimal
+        value = ctrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            ctrl.SetValue(newval)
+            ctrl.SetInsertionPointEnd()
+        self._evtSetGrams( None, newval )
+        #recalculate Estimated Total Value
+        self.SetEstTotal()
+        #recalculate each divers pay and dredge owner's total
+        self.updateCuts()
+            
+    def _evtSetGrams(self, evt=None, TroyOz=None):
+        if evt != None:
+            TroyOz = self.totalOz_textCtrl.GetValue()
+        if TroyOz != '':
+            grams = round( (float( TroyOz ) * 31.1034768), 2 )
+            self.totalGrams_textCtrl.SetValue( str(grams) )
     
     def _evtPctLossChange(self, evt):
         #only allow numbers and  one decimal
@@ -573,7 +657,7 @@ class Report(GUI.RoundReport): #POPUP WINDOW
         #recalculate Estimated Total Value
         self.SetEstTotal()
         #recalculate each divers pay
-        self.updateDiverRows()
+        self.updateCuts()
         
     def _evtLondonSpotChange(self, evt):
         #only allow numbers and  one decimal
@@ -585,7 +669,7 @@ class Report(GUI.RoundReport): #POPUP WINDOW
         #recalculate Estimated Total Value
         self.SetEstTotal()
         #recalculate each divers pay
-        self.updateDiverRows()
+        self.updateCuts()
         
     def _evtSave(self, evt):
         ds = Sql.DataStore(DiveRTdbFile)
@@ -595,10 +679,10 @@ class Report(GUI.RoundReport): #POPUP WINDOW
         ds.SaveReportTotals(CleanupRound, grams, spot, loss)
         
         i=0
-        diverlist = ds.GetDiverList(CleanupRound)
-        for row in self.diverRows:
-            name = diverlist[i]
-            rate = self.diverRows[i][1].GetValue()
+        exDiverLst = ds.GetExtraDiverList(CleanupRound)
+        for row in self.exDiverRows:
+            name = exDiverLst[i]
+            rate = self.exDiverRows[i][1].GetValue()
             ds.SaveReportDiverDetails(CleanupRound, name, rate)
             i+=1
             
@@ -671,6 +755,14 @@ class Report(GUI.RoundReport): #POPUP WINDOW
                 <P ALIGN=CENTER>%s</P>
             </TD>
         </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Troy Ounces / Hour</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
     </TABLE>    
 </CENTER>
 <P ALIGN=CENTER STYLE="margin-bottom: 0in"></P><P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Dredge Owner Cut</B></I></P>
@@ -678,16 +770,58 @@ class Report(GUI.RoundReport): #POPUP WINDOW
     <COL WIDTH=51*>
     <COL WIDTH=51*>
     <COL WIDTH=51*>
-    <COL WIDTH=51*>
     <TR VALIGN=TOP>
         <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Percent</P>
+        </TD>
+        <TD WIDTH=25%%>
             <P ALIGN=CENTER>Grams</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Estimated Value</P>
+        </TD>
+    </TR>
+    <TR VALIGN=TOP>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>%s</P>
         </TD>
         <TD WIDTH=25%%>
             <P ALIGN=CENTER>%s</P>
         </TD>
         <TD WIDTH=25%%>
-            <P ALIGN=CENTER>Estimated Value</P>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+    </TR>
+</TABLE>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P><P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Operator / Diver's Cut</B></I></P>
+<TABLE WIDTH=100%% BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <TR VALIGN=TOP>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Percent</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Gross Grams</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Net Grams</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Estimated Gross Value</P>
+        </TD>
+    </TR>
+    <TR VALIGN=TOP>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>%s</P>
         </TD>
         <TD WIDTH=25%%>
             <P ALIGN=CENTER>%s</P>
@@ -695,10 +829,49 @@ class Report(GUI.RoundReport): #POPUP WINDOW
     </TR>
 </TABLE>
 <P ALIGN=CENTER STYLE="margin-bottom: 0in"></P>\
-""" #%( round, hours, grams, spot, percent, estimate )
+""" #%( round, hours, grams, spot, percentloss, estimate, ozperhr, ownerpercent, ownergrams, ownerestimate, oppercent, opgross, opnet, opestimate  )
         
-        diveTop = """\
-<P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Diving</B></I></P>
+        DiveTop = """\
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Operator / Diver Distribution</B></I></P>
+<TABLE WIDTH=100% BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <TR VALIGN=TOP>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Diver Name</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Diver Hours</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Grams</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Estimated Value</P>
+        </TD>
+    </TR>
+"""
+        
+        Dive = """\
+    <TR VALIGN=TOP>
+        <TD WIDTH=20%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+    </TR>
+""" #%( name, hours, grams, estimate)
+
+        exDiveTop = """\
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Extra Divers</B></I></P>
 <TABLE WIDTH=100% BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
     <COL WIDTH=51*>
     <COL WIDTH=51*>
@@ -724,7 +897,7 @@ class Report(GUI.RoundReport): #POPUP WINDOW
     </TR>
 """
         
-        dive = """\
+        exDive = """\
     <TR VALIGN=TOP>
         <TD WIDTH=20%%>
             <P ALIGN=CENTER>%s</P>
@@ -744,51 +917,7 @@ class Report(GUI.RoundReport): #POPUP WINDOW
     </TR>
 """ #%( name, hours, rate, grams, estimate)
             
-        tendTop = """\
-</TABLE>
-<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P>
-<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P>
-<P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Tending</B></I></P>
-<TABLE WIDTH=100% BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
-    <COL WIDTH=64*>
-    <COL WIDTH=64*>
-    <COL WIDTH=64*>
-    <COL WIDTH=64*>
-    <TR VALIGN=TOP>
-        <TD WIDTH=25%>
-            <P ALIGN=CENTER>Tender Name</P>
-        </TD>
-        <TD WIDTH=25%>
-            <P ALIGN=CENTER>Tending Hours</P>
-        </TD>
-        <TD WIDTH=25%>
-            <P ALIGN=CENTER>Rate</P>
-        </TD>
-        <TD WIDTH=25%>
-            <P ALIGN=CENTER>Balance $</P>
-        </TD>
-    </TR>
-"""
-        
-        tend = """\
-    <TR VALIGN=TOP>
-        <TD WIDTH=25%% >
-            <P ALIGN=CENTER>%s</P>
-        </TD>
-        <TD WIDTH=25%% >
-            <P ALIGN=CENTER>%s</P>
-        </TD>
-        <TD WIDTH=25%% >
-            <P ALIGN=CENTER>%s</P>
-        </TD>
-        <TD WIDTH=25%% >
-            <P ALIGN=CENTER>%s</P>
-        </TD>
-    </TR>
-""" # %(name, hours, rate, pay)
-        
         bottom = """\
-</TABLE>
 <P ALIGN=CENTER STYLE="margin-bottom: 0in"><BR>
 </P>
 </BODY>
@@ -802,25 +931,37 @@ class Report(GUI.RoundReport): #POPUP WINDOW
                      self.londonSpot_textCtrl.GetValue(), 
                      self.percentLoss_textCtrl.GetValue(), 
                      self.estTotal_textCtrl.GetValue(),
-                     self.remainder_textCtrl.GetValue(),
-                     self.remainderEstVal_textCtrl.GetValue() )
-        dives = ""
+                     self.ozPerHr_textCtrl.GetValue(),
+                     self.ownerPercent_textCtrl.GetValue(),
+                     self.ownerGrams_textCtrl.GetValue(),
+                     self.ownerEstimate_textCtrl.GetValue(),
+                     self.operatorPercent_textCtrl.GetValue(),
+                     self.operatorGrams_textCtrl.GetValue(),
+                     self.operNetGrams_textCtrl.GetValue(),
+                     self.operatorEstimate_textCtrl.GetValue() )
+        
         for row in self.diverRows:
-            dives += dive %( row[4].GetValue(),
-                             row[0].GetValue(),
-                             row[1].GetValue(),
-                             row[2].GetValue(),
-                             row[3].GetValue() )
-        tends = ""
-        for row in self.tenderRows:
-            tends += tend %( row[3].GetValue(),
-                             row[0].GetValue(),
-                             row[1].GetValue(),
-                             row[2].GetValue() )
+            DiveTop += Dive %( row[3].GetValue(),
+                               row[0].GetValue(),
+                               row[1].GetValue(),
+                               row[2].GetValue() )
+        DiveTop += "</TABLE>"
+        
+        if self.exDiverRows.__len__() > 0:
+            for row in self.exDiverRows:
+                exDiveTop += exDive %( row[4].GetValue(),
+                                       row[0].GetValue(),
+                                       row[1].GetValue(),
+                                       row[2].GetValue(),
+                                       row[3].GetValue() )
+            exDiveTop += "</TABLE>"
+        else:
+            exDiveTop = ""
+         
         #write to html file
         filepath = DiveRTDir+'\\DiveRT_R%s.html' %( self.round_textCtrl.GetValue())
         fd = open( filepath, 'w' )
-        fd.write( top+diveTop+dives+tendTop+tends+bottom )
+        fd.write( top+DiveTop+exDiveTop+bottom )
         fd.close()
         os.startfile( filepath )
         #open file in default browser
@@ -901,12 +1042,12 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         self.Bind( wx.EVT_CLOSE, self._evtClose )
         self.tenderRate_textCtrl.Bind( wx.EVT_TEXT, self._evtTendRateTxt )
         
-    def addRow(self, Name="", Duty="Diver and Tender", DiveRate=45):
+    def addRow(self, Name="", Duty="Extra Diver", DiveRate=45):
         #print 'adding row#', self.rowNumber
         name_textCtrl = wx.TextCtrl( self, wx.ID_ANY, Name, wx.DefaultPosition, wx.DefaultSize, 0 )
         self.fgSizer.Add( name_textCtrl, 0, wx.ALL, 5 )
         
-        duty_choiceChoices = [ u"Diver and Tender", u"Tender" ]
+        duty_choiceChoices = [ u"Operator Diver", u"Extra Diver", u"Tender" ]
         duty_choice = wx.Choice( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, duty_choiceChoices, 0 )
         duty_choice.SetStringSelection(Duty)
         self.fgSizer.Add( duty_choice, 0, wx.ALL, 5 )
@@ -946,7 +1087,7 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
     
     def _evtDuty(self, evt, rownum):
         rowobjlst = self.rowStack[rownum]
-        if rowobjlst[1].GetStringSelection() == "Diver and Tender":
+        if rowobjlst[1].GetStringSelection() == "Extra Diver":
             rowobjlst[2].Enable() #diveRate_spinCtrl.Enable()
         else:
             rowobjlst[2].Disable()
@@ -1439,8 +1580,8 @@ class GridPanel ( wx.Panel ): #END GRID STUFF
         self.report_button = wx.Button( self, wx.ID_ANY, u"View Round Report", wx.DefaultPosition, wx.DefaultSize, 0 )
         fgSizer12.Add( self.report_button, 0, wx.ALL, 5 )
         
-        self.map_button = wx.Button( self, wx.ID_ANY, u"View Map", wx.DefaultPosition, wx.DefaultSize, 0 )
-        fgSizer12.Add( self.map_button, 0, wx.ALL, 5 )
+        #self.map_button = wx.Button( self, wx.ID_ANY, u"View Map", wx.DefaultPosition, wx.DefaultSize, 0 )
+        #fgSizer12.Add( self.map_button, 0, wx.ALL, 5 )
         
         self.bSizer.Add( fgSizer12, 0, 0, 5 )
         
@@ -1455,7 +1596,7 @@ class GridPanel ( wx.Panel ): #END GRID STUFF
         self.cround_choice.Bind( wx.EVT_CHOICE, self._evtRoundChange )
         self.newRound_button.Bind( wx.EVT_BUTTON, self._evtNewRound )
         self.report_button.Bind( wx.EVT_BUTTON, self._evtReport )
-        self.map_button.Bind( wx.EVT_BUTTON, self._evtMap )   
+        #self.map_button.Bind( wx.EVT_BUTTON, self._evtMap )   
     
     def _evtRefresh(self, evt=None):
         self.grid.grid.Table = Grid.CustomDataTable(CleanupRound, DiveRTdbFile)
@@ -1526,17 +1667,6 @@ class GridPanel ( wx.Panel ): #END GRID STUFF
             msgDlg.ShowModal()
         ds.Close()
         
-    def _evtMap(self, evt):
-        #look for google earth
-        filepath64 = "C:\\Program Files (x86)\\Google\\Google Earth\\client\\googleearth.exe"
-        filepath32 = "C:\\Program Files\\Google\\Google Earth\\client\\googleearth.exe"
-        if os.path.isfile( filepath64 ):
-            os.startfile( "C:\\ProgramData\\DiveRT\\DiveRT.kml" )
-        elif os.path.isfile( filepath32 ):
-            os.startfile( "C:\\ProgramData\\DiveRT\\DiveRT.kml" )
-        else:
-            print 'google earth isn\'t installed'
-            
 class DetailPanel(GUI.DetailPanel): #AUI PANEL
     def init(self):
         self.diveidlst = []
@@ -1589,10 +1719,12 @@ class AUIFrame(wx.Frame): #AUI FRAME
     def CreateMenu(self):
         self.MenuBar = wx.MenuBar( 0 )
         self.file_menu = wx.Menu()
+        self.map_menu = wx.Menu()
         
         #self.export_menuItem = wx.MenuItem( self.file_menu, wx.ID_ANY, u"Export Map", wx.EmptyString, wx.ITEM_NORMAL )
         #self.file_menu.AppendItem( self.export_menuItem )
         
+        ###Menu menu
         self.managedivers_menuItem = wx.MenuItem( self.file_menu, wx.ID_ANY, u"Manage Divers && Tenders", wx.EmptyString, wx.ITEM_NORMAL )
         self.file_menu.AppendItem( self.managedivers_menuItem )
         
@@ -1606,7 +1738,12 @@ class AUIFrame(wx.Frame): #AUI FRAME
         self.file_menu.AppendItem( self.about_menuItem )
         
         self.MenuBar.Append( self.file_menu, u"Menu" )
+        self.MenuBar.Append( self.map_menu, u"Map" )
         self.SetMenuBar( self.MenuBar )
+        
+        ###Map menu items
+        self.viewmap_menuItem = wx.MenuItem( self.map_menu, wx.ID_ANY, u"View Map in Google Earth", wx.EmptyString, wx.ITEM_NORMAL )
+        self.map_menu.AppendItem( self.viewmap_menuItem )
                 
     def DefaultLayout(self):
         # add the panes to the manager
@@ -1655,6 +1792,19 @@ class AUIFrame(wx.Frame): #AUI FRAME
         self.Bind(wx.EVT_MENU, self._evtClose, id = self.quit_menuItem.GetId())
         self.Bind(wx.EVT_MENU, self._evtGPSSettings, id = self.gps_menuItem.GetId())
         self.Bind(wx.EVT_MENU, self._evtShowAbout, id = self.about_menuItem.GetId())
+        
+        self.Bind( wx.EVT_MENU, self._evtMap, id = self.viewmap_menuItem.GetId() )
+        
+    def _evtMap(self, evt):
+        #look for google earth
+        filepath64 = "C:\\Program Files (x86)\\Google\\Google Earth\\client\\googleearth.exe"
+        filepath32 = "C:\\Program Files\\Google\\Google Earth\\client\\googleearth.exe"
+        if os.path.isfile( filepath64 ):
+            os.startfile( "C:\\ProgramData\\DiveRT\\DiveRT.kml" )
+        elif os.path.isfile( filepath32 ):
+            os.startfile( "C:\\ProgramData\\DiveRT\\DiveRT.kml" )
+        else:
+            print 'google earth isn\'t installed'
         
     def _evtShowAbout(self, evt):
         about = About(None)

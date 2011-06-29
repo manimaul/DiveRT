@@ -55,6 +55,9 @@ class diveRTKml():
             <href>C:\ProgramData\DiveRT\icons\%s</href>
           </Icon>
         </IconStyle>
+        <LabelStyle>
+            <scale>0.6</scale>
+        </LabelStyle>
         <BalloonStyle>
           <text>$[description]
           %s</text>
@@ -83,6 +86,9 @@ class diveRTKml():
             <href>C:\\ProgramData\\DiveRT\\icons\\%sship.png</href>
           </Icon>
         </IconStyle>
+        <LabelStyle>
+            <scale>0.6</scale>
+        </LabelStyle>
         <BalloonStyle>
           <text></text>
         </BalloonStyle>
@@ -107,6 +113,9 @@ class diveRTKml():
             <href>C:\\ProgramData\\DiveRT\\icons\\%sstart.png</href>
           </Icon>
         </IconStyle>
+        <LabelStyle>
+            <scale>0.6</scale>
+        </LabelStyle>
         <BalloonStyle>
           <text>
           </text>

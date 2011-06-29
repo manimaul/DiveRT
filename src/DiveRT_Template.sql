@@ -25,8 +25,11 @@ CREATE TABLE crew (
     tendrate CHAR 
 );
 
-INSERT INTO [crew] ([idnum], [name], [duty], [diverate], [tendrate]) VALUES (1, 'Demo Diver', 'Diver and Tender', 45, 20);
-INSERT INTO [crew] ([idnum], [name], [duty], [diverate], [tendrate]) VALUES (2, 'Demo Tender', 'Tender', 45, 20);
+INSERT INTO [crew] ([idnum], [name], [duty], [diverate], [tendrate]) VALUES (1, 'Fred', 'Operator Diver', 45, 20);
+INSERT INTO [crew] ([idnum], [name], [duty], [diverate], [tendrate]) VALUES (1, 'Biff', 'Operator Diver', 45, 20);
+INSERT INTO [crew] ([idnum], [name], [duty], [diverate], [tendrate]) VALUES (1, 'Barney', 'Extra Diver', 45, 20);
+INSERT INTO [crew] ([idnum], [name], [duty], [diverate], [tendrate]) VALUES (2, 'Bob', 'Tender', 45, 20);
+INSERT INTO [crew] ([idnum], [name], [duty], [diverate], [tendrate]) VALUES (2, 'Jerry', 'Tender', 45, 20);
 
 
 -- Table: settings

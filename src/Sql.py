@@ -107,6 +107,20 @@ class DataStore:
             lst.append( each[0] )
         return lst
     
+    def GetOperatorDiverList(self, cleanupNumber=1):
+        self.curs.execute('select name from crew where duty == \'Operator Diver\'')
+        lst = []
+        for each in self.curs.fetchall():
+            lst.append( each[0] )
+        return list(set(lst).intersection(self.GetDiverList(cleanupNumber)))
+    
+    def GetExtraDiverList(self, cleanupNumber=1):
+        self.curs.execute('select name from crew where duty == \'Extra Diver\'')
+        lst = []
+        for each in self.curs.fetchall():
+            lst.append( each[0] )
+        return list(set(lst).intersection(self.GetDiverList(cleanupNumber)))
+    
     def GetTenderList(self, cleanupNumber=1):
         t = (cleanupNumber,cleanupNumber)
         #self.curs.execute('select distinct diverName, tenderName from dives where cleanupNumber=?', t)
@@ -124,6 +138,8 @@ class DataStore:
             start = time.mktime( time.strptime( startstop[0] +' 1970', "%I:%M %p %Y" ) )
             stop = time.mktime( time.strptime( startstop[1] +' 1970', "%I:%M %p %Y" ) )
             seconds += stop - start
+            if seconds < 0:
+                    seconds += 86400 #add 24hours if dive was overnight
         tending = seconds / 60 / 60
         
         t = (cleanupNumber, tenderName)
@@ -133,6 +149,8 @@ class DataStore:
             start = time.mktime( time.strptime( startstop[0] +' 1970', "%I:%M %p %Y" ) )
             stop = time.mktime( time.strptime( startstop[1] +' 1970', "%I:%M %p %Y" ) )
             seconds += stop - start
+            if seconds < 0:
+                    seconds += 86400 #add 24hours if dive was overnight
         diving = seconds / 60 / 60
         
         result = tending - diving
@@ -183,6 +201,8 @@ class DataStore:
                     title = date + ' ' + name[0] #add initial to placemark title
                     title = title + number #add round
                     seconds = time.mktime(time.strptime(each[5] +' 1970', "%I:%M %p %Y")) - time.mktime(time.strptime(each[4] +' 1970', "%I:%M %p %Y"))
+                    if seconds < 0:
+                        seconds += 86400 #add 24hours if dive was overnight
                     hrs = str( round(seconds / 60 / 60, 2) )
                     lat = each[6]
                     latitude = lat.split('*')[0]
@@ -232,7 +252,7 @@ class DataStore:
         return self.curs.fetchall()
     
     def GetBasicDiverList(self):
-        self.curs.execute('select name from crew where duty = \'Diver and Tender\'')
+        self.curs.execute('select name from crew where duty != \'Tender\'')
         divers = self.curs.fetchall()
         lst = []
         for each in divers:
@@ -240,14 +260,10 @@ class DataStore:
         return lst
         
     def GetBasicTenderList(self):
-        self.curs.execute('select name from crew where duty = \'Diver and Tender\'')
-        divers = self.curs.fetchall()
-        self.curs.execute('select name from crew where duty = \'Tender\'')
+        self.curs.execute('select name from crew')
         tenders = self.curs.fetchall()
         lst = []
         for each in tenders:
-            lst.append(each[0])
-        for each in divers:
             lst.append(each[0])
         return lst
     
@@ -481,7 +497,8 @@ if __name__=='__main__':
     DiveRTdbFile = 'C:\ProgramData\DiveRT\DiveRT.db'
     ds = DataStore(DiveRTdbFile)
     
-    print ds.GetTotalHours(1)
+    print ds.GetExtraDiverList(1)
+    print ds.GetOperatorDiverList(1)
     
     ds.Close()
         
