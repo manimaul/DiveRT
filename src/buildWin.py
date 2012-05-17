@@ -19,7 +19,7 @@ buildOptions = dict(compressed = True)
 
  
 setup(name='DiveRT', 
-        version  = '1.06', 
+        version  = '2.0', 
         author = 'Will Kamp', 
         author_email = 'manimaul@gmail.com', 
         url = 'http://matrixmariner.com',
@@ -32,5 +32,6 @@ setup(name='DiveRT',
 from distutils.dir_util import copy_tree
 copy_tree('.//icons', './/build//exe.win32-2.7//icons')
 shutil.copy2('DiveRT_Template.sql', 'build//exe.win32-2.7')
+shutil.copy2('DiveRT_1.07_Update.sql', 'build//exe.win32-2.7')
 shutil.copy2('license.txt', 'build//exe.win32-2.7')
-shutil.copy2('installer.nsi', 'build')
+shutil.copy2('newinstaller.nsi', 'build')

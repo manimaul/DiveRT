@@ -1,9 +1,10 @@
-#!/usr/bin/env python
+ #!/usr/bin/env python
 #-*- coding: utf-8 -*-
 # Copyright (C) 2010 by Will Kamp <manimaul!gmail.com>
 
 import Grid, time, GUI, Sql, os, wx.aui, GPSCom, re, shutil, Kml, subprocess
 import wx.grid as gridlib, wx.lib.scrolledpanel as scrolled
+from platform import system
 
 class ConfirmDlg(GUI.ConfirmDlg): #POPUP WINDOW
     def _evtYes(self, evt):
@@ -353,47 +354,88 @@ class GPSSettings(GUI.GPSSettings): #POPUP WINDOW
 
 class Report(GUI.RoundReport): #POPUP WINDOW
     def _evtInit(self, evt):
+        self.Cround = CleanupRound
+        self.SetRound()
         ds = Sql.DataStore(DiveRTdbFile)
-        self.round_textCtrl.SetValue( str(CleanupRound) )
-        self.dateRange_staticText.SetLabel( ds.GetRoundDateRange(CleanupRound) )
-        self.totaltime = ds.GetTotalHours(CleanupRound)
+        lastRound = int( ds.GetLastCleanupRound() )
+        #self.round_spinCtrl.SetRange(1, lastRound)
+        for n in range( int(lastRound) ):
+            self.round_choice.Append( str(n+1) )
+        self.round_choice.SetSelection( CleanupRound-1 )
+        ds.Close()
+    
+    def _evtRoundChange(self, evt):
+        #self.Cround = self.round_spinCtrl.GetValue()
+        self.Cround = int( self.round_choice.GetStringSelection() )
+        self.totalGrams_textCtrl.SetValue("")
+        self.totalOz_textCtrl.SetValue("")
+        self.londonSpot_textCtrl.SetValue("")
+#        for obj in self.diverRows:
+#            obj[0].Destroy()
+#            obj[1].Destroy()
+#            obj[2].Destroy()
+#            obj[3].Destroy()
+        for obj in self.exDiverRows:
+            obj[0].Destroy()
+            obj[1].Destroy()
+            obj[2].Destroy()
+            obj[3].Destroy()
+            obj[4].Destroy()
+#        self.extraDiver_staticline.Show()
+#        self.extraDiver_staticText.Show()
+#        self.exName_staticText.Show()
+#        self.exHours_staticText.Show()
+#        self.exPay_staticText.Show()
+#        self.exGrams_staticText.Show()
+#        self.exValue_staticText.Show()
+        self.SetRound()
+        
+    def SetRound(self):
+        ds = Sql.DataStore(DiveRTdbFile)
+        #self.round_spinCtrl.SetValue( self.Cround )
+        self.dateRange_staticText.SetLabel( ds.GetRoundDateRange(self.Cround) )
+        self.totaltime = ds.GetTotalHours(self.Cround)
         self.totalHours_textCtrl.SetValue(self.totaltime)
         
-        ##extra diver ... ladies firt
-        exDiverLst = ds.GetExtraDiverList(CleanupRound)
-        diverhours = ds.GetCleanupTotals(CleanupRound)
+        ##get percentages
+        #ownerpct, operpct = ds.GetPercentages(self.Cround)
+        #self.ownerPercent_textCtrl.SetValue( str(ownerpct) )
+        #self.operatorPercent_textCtrl.SetValue( str(operpct) )
+        
+        ##diver ... ladies firt
+        exDiverLst = ds.GetExtraDiverList(self.Cround)
+        diverhours = ds.GetCleanupTotals(self.Cround)
         #get default diver percentages here... will be updated later if cleanup/round has saved data
         diverrates = ds.GetDiverRates(exDiverLst)
         
         #now get saved diver percentages
-        savedDiverRates = ds.GetReportDiverDetails(CleanupRound)
-        comparelst = savedDiverRates.keys()
-        comparelst.reverse()
-        if comparelst == exDiverLst:
-            #print 'retrieving saved diver rates'
-            diverrates = savedDiverRates
+        savedDiverRates = ds.GetReportDiverDetails(self.Cround)
         
-        self.diverRows = []
+        #self.diverRows = []
         self.exDiverRows = []
         for diver in exDiverLst:
-            self.addExDiverRow(diver, diverhours[diver], diverrates[diver])
-        if exDiverLst.__len__() == 0:
-            self.extraDiver_staticline.Hide()
-            self.extraDiver_staticText.Hide()
-            self.exName_staticText.Hide()
-            self.exHours_staticText.Hide()
-            self.exPay_staticText.Hide()
-            self.exGrams_staticText.Hide()
-            self.exValue_staticText.Hide()
+            if savedDiverRates.has_key(diver):
+                rate = savedDiverRates[diver]
+            else:
+                rate = diverrates[diver]
+            self.addExDiverRow(diver, diverhours[diver], rate)
+#        if exDiverLst.__len__() == 0:
+#            self.extraDiver_staticline.Hide()
+#            self.extraDiver_staticText.Hide()
+#            self.exName_staticText.Hide()
+#            self.exHours_staticText.Hide()
+#            self.exPay_staticText.Hide()
+#            self.exGrams_staticText.Hide()
+#            self.exValue_staticText.Hide()
             #self.extraDiving_fgSizer.Hide()
         
         #operator / divers    
-        diverLst = ds.GetOperatorDiverList(CleanupRound)
-        for diver in diverLst:
-            self.addDiverRow(diver, diverhours[diver])
-        
+#        diverLst = ds.GetOperatorDiverList(self.Cround)
+#        for diver in diverLst:
+#            self.addDiverOperatorRow(diver, diverhours[diver])
+                    
         #get any saved data
-        data = ds.GetReportTotals(CleanupRound)
+        data = ds.GetReportTotals(self.Cround)
         if data is not None:
             self.totalGrams_textCtrl.SetValue(data[1])
             self._evtSetTroyOz( None, data[1] )
@@ -405,8 +447,11 @@ class Report(GUI.RoundReport): #POPUP WINDOW
             
         ds.Close()
         
+        self.bSizerX.Fit( self.scrollwindow )
         self.bSizer.Fit( self )
+        
         self.Layout()
+        self.SetSize( (650, displaySize[1]) )
     
     def updateCuts(self):
         gramstr = self.totalGrams_textCtrl.GetValue()
@@ -415,82 +460,66 @@ class Report(GUI.RoundReport): #POPUP WINDOW
         else:
             totalGrams = 0.0
         
-        ownerPct = self.ownerPercent_textCtrl.GetValue()
-        if ownerPct == "":
-            ownergrams = 0.0
-        else:
-            ownergrams = totalGrams * ( float(ownerPct) / 100 )
-        self.ownerGrams_textCtrl.SetValue( str( ownergrams ) )
-        self.ownerEstimate_textCtrl.SetValue( self.grams2EstDollars(ownergrams) )
+        #ownerPct = self.ownerPercent_textCtrl.GetValue()
         
-        operPct = self.operatorPercent_textCtrl.GetValue()
-        if operPct == "":
-            operatorgrams = 0.0
-        else:
-            operatorgrams = totalGrams * ( float(operPct) / 100 )
-        self.operatorGrams_textCtrl.SetValue( str( operatorgrams ) )
-        self.operatorEstimate_textCtrl.SetValue( self.grams2EstDollars( operatorgrams ) )
+#        if ownerPct == "":
+#            ownergrams = 0.0
+#        else:
+#            ownergrams = totalGrams * ( float(ownerPct) / 100 )
+#        self.ownerGrams_textCtrl.SetValue( str( ownergrams ) )
+#        self.ownerEstimate_textCtrl.SetValue( self.grams2EstDollars(ownergrams) )
         
-        #extra diver rows
+#        operPct = self.operatorPercent_textCtrl.GetValue()
+#        if operPct == "":
+#            operatorgrams = 0.0
+#        else:
+#            operatorgrams = totalGrams * ( float(operPct) / 100 )
+#        self.operatorGrams_textCtrl.SetValue( str( operatorgrams ) )
+#        self.operatorEstimate_textCtrl.SetValue( self.grams2EstDollars( operatorgrams ) )
+        
+        #diver rows
         diverGrams = 0.0
         for row in self.exDiverRows:
             self._evtDiverPercentSet(row[0], row[1], row[2], row[3] )
             diverGrams += float( row[2].GetValue() )
             
         #set net grams
-        net = float( self.operatorGrams_textCtrl.GetValue() ) - diverGrams
-        self.operNetGrams_textCtrl.SetValue( str( net ) )
+        net = totalGrams - diverGrams
+        self.ownerGrams_textCtrl.SetValue( str( net ) )
+        self.ownerEstimate_textCtrl.SetValue( self.grams2EstDollars(net) )
         
         #operator diver times
-        operatorHrs = 0.0
-        for row in self.diverRows:
-            operatorHrs += float( row[0].GetValue() )
-        for row in self.diverRows:
-            pct = float( row[0].GetValue() ) / operatorHrs
-            dgrams = round(pct*net, 3)
-            row[1].SetValue( str( dgrams ) )
-            row[2].SetValue( self.grams2EstDollars( dgrams) )
+#        operatorHrs = 0.0
+#        for row in self.diverRows:
+#            operatorHrs += float( row[0].GetValue() )
+#        for row in self.diverRows:
+#            pct = float( row[0].GetValue() ) / operatorHrs
+#            dgrams = round(pct*net, 3)
+#            row[1].SetValue( str( dgrams ) )
+#            row[2].SetValue( self.grams2EstDollars( dgrams) )
         
         #set oz per hr
         ozPerHr = round( (self.grams2TroyOz(totalGrams) / float( self.totalHours_textCtrl.GetValue() )), 2 )
         self.ozPerHr_textCtrl.SetValue( str(ozPerHr) )
         
-    def addDiverRow(self, name, hours):
-        divername_textCtrl = wx.TextCtrl( self, wx.ID_ANY, name, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
-        divername_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
-        self.diving_fgSizer.Add( divername_textCtrl, 0, wx.ALL, 5 )
-        
-        diverhours_textCtrl = wx.TextCtrl( self, wx.ID_ANY, hours, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
-        diverhours_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
-        self.diving_fgSizer.Add( diverhours_textCtrl, 0, wx.ALL, 5 )
-        
-        diverpay_textCtrl = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
-        diverpay_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
-        self.diving_fgSizer.Add( diverpay_textCtrl, 0, wx.ALL, 5 )
-        
-        payvalue_textCtrl = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
-        payvalue_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
-        self.diving_fgSizer.Add( payvalue_textCtrl, 0, wx.ALL, 5)
-                
-        self.diverRows.append( (diverhours_textCtrl, diverpay_textCtrl, payvalue_textCtrl, divername_textCtrl) )
     
     def addExDiverRow(self, name, hours, percent):
-        divername_textCtrl = wx.TextCtrl( self, wx.ID_ANY, name, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        divername_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, name, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
         divername_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
         self.extraDiving_fgSizer.Add( divername_textCtrl, 0, wx.ALL, 5 )
         
-        diverhours_textCtrl = wx.TextCtrl( self, wx.ID_ANY, hours, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diverhours_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, hours, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
         diverhours_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
         self.extraDiving_fgSizer.Add( diverhours_textCtrl, 0, wx.ALL, 5 )
         
-        diverperct_textCtrl = wx.TextCtrl( self, wx.ID_ANY, percent, wx.DefaultPosition, wx.DefaultSize, 0 )
+        diverperct_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, percent, wx.DefaultPosition, wx.DefaultSize, 0 )
         self.extraDiving_fgSizer.Add( diverperct_textCtrl, 0, wx.ALL, 5 )
         
-        diverpay_textCtrl = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diverpay_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
         diverpay_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
         self.extraDiving_fgSizer.Add( diverpay_textCtrl, 0, wx.ALL, 5 )
         
-        payvalue_textCtrl = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        payvalue_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
         payvalue_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
         self.extraDiving_fgSizer.Add( payvalue_textCtrl, 0, wx.ALL, 5)
         
@@ -525,6 +554,9 @@ class Report(GUI.RoundReport): #POPUP WINDOW
             grams = ( hrs / thrs ) * tgrams * pct
             diverpay_textCtrl.SetValue( str(round(grams, 1)) )
             payvalue_textCtrl.SetValue ( self.grams2EstDollars(grams) )
+        
+        if evt != None:
+            self.updateCuts()
                
     def SetEstTotal(self):
         grams = self.totalGrams_textCtrl.GetValue().strip()
@@ -676,14 +708,593 @@ class Report(GUI.RoundReport): #POPUP WINDOW
         grams = self.totalGrams_textCtrl.GetValue()
         spot = self.londonSpot_textCtrl.GetValue()
         loss = self.percentLoss_textCtrl.GetValue()
-        ds.SaveReportTotals(CleanupRound, grams, spot, loss)
-        
+        ds.SaveReportTotals(self.Cround, grams, spot, loss, 0, 0)
         i=0
-        exDiverLst = ds.GetExtraDiverList(CleanupRound)
+        exDiverLst = ds.GetExtraDiverList(self.Cround)
         for row in self.exDiverRows:
             name = exDiverLst[i]
             rate = self.exDiverRows[i][1].GetValue()
-            ds.SaveReportDiverDetails(CleanupRound, name, rate)
+            ds.SaveReportDiverDetails(self.Cround, name, rate)
+            i+=1
+            
+        ds.Close()
+        self.Destroy()
+        
+    def _evtPrintView(self, evt):
+        #templates
+        top = """\
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<HTML>
+<HEAD>
+    <META HTTP-EQUIV="CONTENT-TYPE" CONTENT="text/html; charset=windows-1252">
+    <TITLE></TITLE>
+    <META NAME="GENERATOR" CONTENT="DiveRT">
+    <STYLE TYPE="text/css">
+    <!--
+        @page { margin: 0.79in }
+        P { margin-bottom: 0.08in }
+        TD P { margin-bottom: 0in }
+        A:link { so-language: zxx }
+    -->
+    </STYLE>
+</HEAD>
+<BODY LANG="en-US" DIR="LTR">
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><B>Dive RT Report</B></P>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Cleanup / Round %s</B></I></P>
+<CENTER>
+    <TABLE WIDTH=316 BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+        <COL WIDTH=215>
+        <COL WIDTH=83>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Total Dive Hours</P>
+            </TD>
+            <TD WIDTH=83 >
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Total Grams Recovered</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>London Spot</P>
+            </TD>
+            <TD WIDTH=83 >
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Estimated Refinement Recovery</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Estimated Refinement Value</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Troy Ounces / Hour</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+    </TABLE>    
+</CENTER>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P><P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Dredge Owner Cut</B></I></P>
+<TABLE WIDTH=100%% BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <TR VALIGN=TOP>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Grams</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Estimated Value</P>
+        </TD>
+    </TR>
+    <TR VALIGN=TOP>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+    </TR>
+</TABLE>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P>\
+""" #%( round, hours, grams, spot, percentloss, estimate, ozperhr, ownergrams, ownerestimate  )
+
+        exDiveTop = """\
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Divers</B></I></P>
+<TABLE WIDTH=100% BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <COL WIDTH=51*>
+    <TR VALIGN=TOP>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Diver Name</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Diver Hours</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>% of time</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Grams</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Estimated Value</P>
+        </TD>
+    </TR>
+"""
+        
+        exDive = """\
+    <TR VALIGN=TOP>
+        <TD WIDTH=20%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+    </TR>
+""" #%( name, hours, rate, grams, estimate)
+            
+        bottom = """\
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><BR>
+</P>
+</BODY>
+</HTML>
+"""
+        
+        #compile templates
+        top = top %( self.round_choice.GetStringSelection() + '<BR>' + self.dateRange_staticText.GetLabel(), 
+                     self.totalHours_textCtrl.GetValue(), 
+                     self.totalGrams_textCtrl.GetValue(), 
+                     self.londonSpot_textCtrl.GetValue(), 
+                     self.percentLoss_textCtrl.GetValue(), 
+                     self.estTotal_textCtrl.GetValue(),
+                     self.ozPerHr_textCtrl.GetValue(),
+                     self.ownerGrams_textCtrl.GetValue(),
+                     self.ownerEstimate_textCtrl.GetValue() )
+        
+        if self.exDiverRows.__len__() > 0:
+            for row in self.exDiverRows:
+                exDiveTop += exDive %( row[4].GetValue(),
+                                       row[0].GetValue(),
+                                       row[1].GetValue(),
+                                       row[2].GetValue(),
+                                       row[3].GetValue() )
+            exDiveTop += "</TABLE>"
+        else:
+            exDiveTop = ""
+         
+        #write to html file
+        filepath = DiveRTDir+'\\DiveRT_R%s.html' %( self.round_choice.GetStringSelection() )
+        fd = open( filepath, 'w' )
+        fd.write( top+exDiveTop+bottom )
+        fd.close()
+        os.startfile( filepath )
+        #open file in default browser
+        
+#    def _evtOnSize(self, evt):
+#        self.scrollwindow.SetSize(self.GetClientSize())
+#        self.Layout()
+#        self.Refresh()
+        
+    def _evtClose(self, evt):
+        self.Destroy()
+
+class ReportTahta(GUI.RoundReportTahta): #POPUP WINDOW
+    def _evtInit(self, evt):
+        self.Cround = CleanupRound
+        self.SetRound()
+        ds = Sql.DataStore(DiveRTdbFile)
+        lastRound = int( ds.GetLastCleanupRound() )
+        #self.round_spinCtrl.SetRange(1, lastRound)
+        for n in range( int(lastRound) ):
+            self.round_choice.Append( str(n+1) )
+        self.round_choice.SetSelection( CleanupRound-1 )
+        ds.Close()
+    
+    def _evtRoundChange(self, evt):
+        #self.Cround = self.round_spinCtrl.GetValue()
+        self.Cround = int( self.round_choice.GetStringSelection() )
+        self.totalGrams_textCtrl.SetValue("")
+        self.totalOz_textCtrl.SetValue("")
+        self.londonSpot_textCtrl.SetValue("")
+        for obj in self.diverRows:
+            obj[0].Destroy()
+            obj[1].Destroy()
+            obj[2].Destroy()
+            obj[3].Destroy()
+        for obj in self.exDiverRows:
+            obj[0].Destroy()
+            obj[1].Destroy()
+            obj[2].Destroy()
+            obj[3].Destroy()
+            obj[4].Destroy()
+        self.extraDiver_staticline.Show()
+        self.extraDiver_staticText.Show()
+        self.exName_staticText.Show()
+        self.exHours_staticText.Show()
+        self.exPay_staticText.Show()
+        self.exGrams_staticText.Show()
+        self.exValue_staticText.Show()
+        self.SetRound()
+        
+    def SetRound(self):
+        ds = Sql.DataStore(DiveRTdbFile)
+        #self.round_spinCtrl.SetValue( self.Cround )
+        self.dateRange_staticText.SetLabel( ds.GetRoundDateRange(self.Cround) )
+        self.totaltime = ds.GetTotalHours(self.Cround)
+        self.totalHours_textCtrl.SetValue(self.totaltime)
+        
+        ##get percentages
+        ownerpct, operpct = ds.GetPercentages(self.Cround)
+        self.ownerPercent_textCtrl.SetValue( str(ownerpct) )
+        self.operatorPercent_textCtrl.SetValue( str(operpct) )
+        
+        ##diver ... ladies firt
+        exDiverLst = ds.GetExtraDiverList(self.Cround)
+        diverhours = ds.GetCleanupTotals(self.Cround)
+        #get default diver percentages here... will be updated later if cleanup/round has saved data
+        diverrates = ds.GetDiverRates(exDiverLst)
+        
+        #now get saved diver percentages
+        savedDiverRates = ds.GetReportDiverDetails(self.Cround)
+        
+        self.diverRows = []
+        self.exDiverRows = []
+        for diver in exDiverLst:
+            if savedDiverRates.has_key(diver):
+                rate = savedDiverRates[diver]
+            else:
+                rate = diverrates[diver]
+            self.addExDiverRow(diver, diverhours[diver], rate)
+        if exDiverLst.__len__() == 0:
+            self.extraDiver_staticline.Hide()
+            self.extraDiver_staticText.Hide()
+            self.exName_staticText.Hide()
+            self.exHours_staticText.Hide()
+            self.exPay_staticText.Hide()
+            self.exGrams_staticText.Hide()
+            self.exValue_staticText.Hide()
+            #self.extraDiving_fgSizer.Hide()
+        
+        #operator / divers    
+        diverLst = ds.GetOperatorDiverList(self.Cround)
+        for diver in diverLst:
+            self.addDiverOperatorRow(diver, diverhours[diver])
+                    
+        #get any saved data
+        data = ds.GetReportTotals(self.Cround)
+        if data is not None:
+            self.totalGrams_textCtrl.SetValue(data[1])
+            self._evtSetTroyOz( None, data[1] )
+            self.londonSpot_textCtrl.SetValue(data[2])
+            self.percentLoss_textCtrl.SetValue(data[3])
+        
+        #self.SetEstTotal()
+        self.updateCuts()
+            
+        ds.Close()
+        
+        self.bSizerX.Fit( self.scrollwindow )
+        self.bSizer.Fit( self )
+        
+        self.Layout()
+        self.SetSize( (650, displaySize[1]) )
+    
+    def updateCuts(self):
+        gramstr = self.totalGrams_textCtrl.GetValue()
+        if gramstr != '':
+            totalGrams = float( gramstr )
+        else:
+            totalGrams = 0.0
+        
+        ownerPct = self.ownerPercent_textCtrl.GetValue()
+        
+        if ownerPct == "":
+            ownergrams = 0.0
+        else:
+            ownergrams = totalGrams * ( float(ownerPct) / 100 )
+        self.ownerGrams_textCtrl.SetValue( str( ownergrams ) )
+        self.ownerEstimate_textCtrl.SetValue( self.grams2EstDollars(ownergrams) )
+        
+        operPct = self.operatorPercent_textCtrl.GetValue()
+        if operPct == "":
+            operatorgrams = 0.0
+        else:
+            operatorgrams = totalGrams * ( float(operPct) / 100 )
+        self.operatorGrams_textCtrl.SetValue( str( operatorgrams ) )
+        self.operatorEstimate_textCtrl.SetValue( self.grams2EstDollars( operatorgrams ) )
+        
+        #diver rows
+        diverGrams = 0.0
+        for row in self.exDiverRows:
+            self._evtDiverPercentSet(row[0], row[1], row[2], row[3] )
+            diverGrams += float( row[2].GetValue() )
+            
+        #set net grams
+        net = float( self.operatorGrams_textCtrl.GetValue() ) - diverGrams
+        self.operNetGrams_textCtrl.SetValue( str( net ) )
+        
+        #operator diver times
+        operatorHrs = 0.0
+        for row in self.diverRows:
+            operatorHrs += float( row[0].GetValue() )
+        for row in self.diverRows:
+            pct = float( row[0].GetValue() ) / operatorHrs
+            dgrams = round(pct*net, 3)
+            row[1].SetValue( str( dgrams ) )
+            row[2].SetValue( self.grams2EstDollars( dgrams) )
+        
+        #set oz per hr
+        ozPerHr = round( (self.grams2TroyOz(totalGrams) / float( self.totalHours_textCtrl.GetValue() )), 2 )
+        self.ozPerHr_textCtrl.SetValue( str(ozPerHr) )
+        
+    def addDiverOperatorRow(self, name, hours):
+        divername_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, name, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        divername_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( divername_textCtrl, 0, wx.ALL, 5 )
+        
+        diverhours_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, hours, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diverhours_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( diverhours_textCtrl, 0, wx.ALL, 5 )
+        
+        diverpay_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diverpay_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( diverpay_textCtrl, 0, wx.ALL, 5 )
+        
+        payvalue_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        payvalue_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( payvalue_textCtrl, 0, wx.ALL, 5)
+                
+        self.diverRows.append( (diverhours_textCtrl, diverpay_textCtrl, payvalue_textCtrl, divername_textCtrl) )
+    
+    def addExDiverRow(self, name, hours, percent):
+        divername_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, name, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        divername_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( divername_textCtrl, 0, wx.ALL, 5 )
+        
+        diverhours_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, hours, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diverhours_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( diverhours_textCtrl, 0, wx.ALL, 5 )
+        
+        diverperct_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, percent, wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.extraDiving_fgSizer.Add( diverperct_textCtrl, 0, wx.ALL, 5 )
+        
+        diverpay_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diverpay_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( diverpay_textCtrl, 0, wx.ALL, 5 )
+        
+        payvalue_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        payvalue_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( payvalue_textCtrl, 0, wx.ALL, 5)
+        
+        diverperct_textCtrl.Bind( wx.EVT_TEXT, lambda evt, h=diverhours_textCtrl, p=diverperct_textCtrl, g=diverpay_textCtrl, e=payvalue_textCtrl, : self._evtDiverPercentSet(h, p, g, e, evt))
+        
+        self.exDiverRows.append( (diverhours_textCtrl, diverperct_textCtrl, diverpay_textCtrl, payvalue_textCtrl, divername_textCtrl) )
+        
+    def _evtDiverPercentSet(self, diverhours_textCtrl, diverperct_textCtrl, diverpay_textCtrl, payvalue_textCtrl, evt=None ):
+        val = diverperct_textCtrl.GetValue()
+        newval = self.floatstr(val)
+        if newval != val:
+            diverperct_textCtrl.SetValue(newval)
+            diverperct_textCtrl.SetInsertionPointEnd()
+        if newval == "":
+            newval = 0.0
+        
+        t = self.totalGrams_textCtrl.GetValue().strip()
+        if t == "":
+            tgrams = 0.0
+        else:
+            tgrams = float ( t )
+        
+        t = self.totalHours_textCtrl.GetValue()
+        if t == "":
+            thrs = 0.0
+        else:
+            thrs = float( t )
+            
+        hrs = float( diverhours_textCtrl.GetValue() )
+        pct = float( newval ) / 100.0
+        if thrs != 0:
+            grams = ( hrs / thrs ) * tgrams * pct
+            diverpay_textCtrl.SetValue( str(round(grams, 1)) )
+            payvalue_textCtrl.SetValue ( self.grams2EstDollars(grams) )
+        
+        if evt != None:
+            self.updateCuts()
+               
+    def SetEstTotal(self):
+        grams = self.totalGrams_textCtrl.GetValue().strip()
+        if grams == '':
+            grams = 0
+        else:
+            grams = float( grams )
+        dollars = self.grams2EstDollars(grams)
+        self.estTotal_textCtrl.SetValue(dollars)
+        
+    def grams2EstDollars(self, grams):
+        percentLoss = self.percentLoss_textCtrl.GetValue()
+        if percentLoss == '':
+            pct = 0
+        else:
+            pct = float( percentLoss ) / 100.0
+            
+        londonSpot = self.londonSpot_textCtrl.GetValue()
+        if londonSpot == '':
+            spot = 0
+        else:
+            spot = float( londonSpot )
+            
+        toz = self.grams2TroyOz(grams)
+            
+        return '$' + '{:20,.2f}'.format( round( toz*pct*spot, 2) ).strip()
+    
+    def grams2TroyOz(self, grams):
+        gramsPerToz = 31.1034768
+        return grams / gramsPerToz
+        
+    def floatstr(self, somestring):
+        mystr = ''
+        decimal = False
+        for each in somestring:
+            srch = re.search(r'\d', each)
+            if srch is not None:
+                mystr += srch.group(0)
+            srch = re.search(r'\.', each)
+            if srch is not None and decimal is False:
+                mystr += srch.group(0)
+                decimal = True
+        return mystr
+        
+    def _evtOwnerCut(self, evt):
+        ctrl = evt.GetEventObject()
+        value = ctrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            ctrl.SetValue(newval)
+            ctrl.SetInsertionPointEnd()
+        if newval != '':
+            pct = float(newval)
+            if pct > 100:
+                pct = 100
+                ctrl.SetValue( '100' )
+                ctrl.SetInsertionPointEnd()
+            self.operatorPercent_textCtrl.SetValue( str( 100 - pct ) )
+        self.updateCuts()
+            
+    def _evtOperatorCut(self, evt):
+        ctrl = evt.GetEventObject()
+        value = ctrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            ctrl.SetValue(newval)
+            ctrl.SetInsertionPointEnd()
+        if newval != '':
+            pct = float(newval)
+            if pct > 100:
+                pct = 100
+                ctrl.SetValue( '100' )
+                ctrl.SetInsertionPointEnd()
+            self.ownerPercent_textCtrl.SetValue( str( 100 - pct ) )
+        self.updateCuts()     
+    
+    def _evtGramsChange(self, evt):
+        ctrl = evt.GetEventObject()
+        #only allow numbers and  one decimal
+        value = ctrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            ctrl.SetValue(newval)
+            ctrl.SetInsertionPointEnd()
+        self._evtSetTroyOz( None, newval )
+        #recalculate Estimated Total Value
+        self.SetEstTotal()
+        #recalculate each divers pay and dredge owner's total
+        self.updateCuts()
+        
+    def _evtSetTroyOz(self, evt=None, grams=None):
+        if evt != None:
+            grams = self.totalGrams_textCtrl.GetValue()
+        if grams != '':
+            troyOz = round( (float( grams ) / 31.1034768), 3 )
+            self.totalOz_textCtrl.SetValue( str(troyOz) )
+    
+    def _evtTozChange(self, evt):
+        ctrl = evt.GetEventObject()        
+        #only allow numbers and  one decimal
+        value = ctrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            ctrl.SetValue(newval)
+            ctrl.SetInsertionPointEnd()
+        self._evtSetGrams( None, newval )
+        #recalculate Estimated Total Value
+        self.SetEstTotal()
+        #recalculate each divers pay and dredge owner's total
+        self.updateCuts()
+            
+    def _evtSetGrams(self, evt=None, TroyOz=None):
+        if evt != None:
+            TroyOz = self.totalOz_textCtrl.GetValue()
+        if TroyOz != '':
+            grams = round( (float( TroyOz ) * 31.1034768), 2 )
+            self.totalGrams_textCtrl.SetValue( str(grams) )
+    
+    def _evtPctLossChange(self, evt):
+        #only allow numbers and  one decimal
+        value = self.percentLoss_textCtrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            self.percentLoss_textCtrl.SetValue(newval)
+            self.percentLoss_textCtrl.SetInsertionPointEnd()
+        if newval != '':
+            if float(newval) > 100.0:
+                self.percentLoss_textCtrl.SetValue('100')
+                self.percentLoss_textCtrl.SetInsertionPointEnd()
+        #recalculate Estimated Total Value
+        self.SetEstTotal()
+        #recalculate each divers pay
+        self.updateCuts()
+        
+    def _evtLondonSpotChange(self, evt):
+        #only allow numbers and  one decimal
+        value = self.londonSpot_textCtrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            self.londonSpot_textCtrl.SetValue(newval)
+            self.londonSpot_textCtrl.SetInsertionPointEnd()
+        #recalculate Estimated Total Value
+        self.SetEstTotal()
+        #recalculate each divers pay
+        self.updateCuts()
+        
+    def _evtSave(self, evt):
+        ds = Sql.DataStore(DiveRTdbFile)
+        grams = self.totalGrams_textCtrl.GetValue()
+        spot = self.londonSpot_textCtrl.GetValue()
+        loss = self.percentLoss_textCtrl.GetValue()
+        ownerpct = self.ownerPercent_textCtrl.GetValue()
+        operpct = self.operatorPercent_textCtrl.GetValue()
+        ds.SaveReportTotals(self.Cround, grams, spot, loss, ownerpct, operpct)
+        
+        i=0
+        exDiverLst = ds.GetExtraDiverList(self.Cround)
+        for row in self.exDiverRows:
+            name = exDiverLst[i]
+            rate = self.exDiverRows[i][1].GetValue()
+            ds.SaveReportDiverDetails(self.Cround, name, rate)
             i+=1
             
         ds.Close()
@@ -871,7 +1482,7 @@ class Report(GUI.RoundReport): #POPUP WINDOW
 """ #%( name, hours, grams, estimate)
 
         exDiveTop = """\
-<P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Extra Divers</B></I></P>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Divers</B></I></P>
 <TABLE WIDTH=100% BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
     <COL WIDTH=51*>
     <COL WIDTH=51*>
@@ -925,7 +1536,7 @@ class Report(GUI.RoundReport): #POPUP WINDOW
 """
         
         #compile templates
-        top = top %( self.round_textCtrl.GetValue() + '<BR>' + self.dateRange_staticText.GetLabel(), 
+        top = top %( self.round_choice.GetStringSelection() + '<BR>' + self.dateRange_staticText.GetLabel(), 
                      self.totalHours_textCtrl.GetValue(), 
                      self.totalGrams_textCtrl.GetValue(), 
                      self.londonSpot_textCtrl.GetValue(), 
@@ -959,7 +1570,839 @@ class Report(GUI.RoundReport): #POPUP WINDOW
             exDiveTop = ""
          
         #write to html file
-        filepath = DiveRTDir+'\\DiveRT_R%s.html' %( self.round_textCtrl.GetValue())
+        filepath = DiveRTDir+'\\DiveRT_R%s.html' %( self.round_choice.GetStringSelection() )
+        fd = open( filepath, 'w' )
+        fd.write( top+DiveTop+exDiveTop+bottom )
+        fd.close()
+        os.startfile( filepath )
+        #open file in default browser
+        
+#    def _evtOnSize(self, evt):
+#        self.scrollwindow.SetSize(self.GetClientSize())
+#        self.Layout()
+#        self.Refresh()
+        
+    def _evtClose(self, evt):
+        self.Destroy()
+        
+class SeasonReport(GUI.SeasonReport): #POPUP WINDOW
+    def _evtInit(self, evt):
+        ds = Sql.DataStore(DiveRTdbFile)
+        #date range
+        self.dateRange_staticText.SetLabel( ds.GetSeasonDates() )
+        #total hours
+        hours = ds.GetSeasonHours()
+        self.totalHours_textCtrl.SetValue( str(hours) )
+        #total grams
+        self.totalGrams = ds.GetSeasonGrams()
+        self.totalGrams_textCtrl.SetValue( str(self.totalGrams) )
+        #total oz
+        oz = self.grams2TroyOz(self.totalGrams)
+        self.totalOz_textCtrl.SetValue( str(oz) )
+        #oz per hour
+        if (hours > 0.0):
+            ozPerHr = round( (oz/hours),2 )
+        else:
+            ozPerHr = 0.0
+        self.ozPerHr_textCtrl.SetValue( str(ozPerHr) )
+        #list of all diver hours
+        diverhours = ds.GetCleanupTotals()
+        ##Diver ... ladies firt
+        exDiverLst = ds.GetExtraDiverList()
+        self.exDiverRows = []
+        diverGrams = 0.0
+        for diver in exDiverLst:
+            grams = ds.GetSeasonExtraDiverGrams(diver)
+            diverGrams += grams
+            oz = self.grams2TroyOz(grams)
+            value = ""
+            if diverhours.has_key(diver):
+                self.addExDiverRow(diver, diverhours[diver], str(grams), str(oz), value)
+        self.ownergrams = self.totalGrams-diverGrams
+        self.ownerGrams_textCtrl.SetValue( str(self.ownergrams) )
+        self.londonSpot_textCtrl.SetValue( str(ds.GetAverageLondonSpot()) )
+        ds.Close()
+        
+        self.bSizerX.Fit( self.scrollwindow )
+        self.bSizer.Fit( self )
+        self.scrollwindow.Layout()
+        self.Layout()
+        
+        self.SetSize( (650, displaySize[1]) )
+        
+        self._evtLondonSpotChange(None)
+        
+    def grams2EstDollars(self, grams):
+        percentLoss = self.percentLoss_textCtrl.GetValue()
+        if percentLoss == '':
+            pct = 0
+        else:
+            pct = float( percentLoss ) / 100.0
+            
+        londonSpot = self.londonSpot_textCtrl.GetValue()
+        if londonSpot == '':
+            spot = 0
+        else:
+            spot = float( londonSpot )
+            
+        toz = self.grams2TroyOz(grams)
+            
+        return '$' + '{:20,.2f}'.format( round( toz*pct*spot, 2) ).strip()
+    
+    def grams2TroyOz(self, grams):
+        gramsPerToz = 31.1034768
+        return round((grams / gramsPerToz), 2)
+        
+    def floatstr(self, somestring):
+        mystr = ''
+        decimal = False
+        for each in somestring:
+            srch = re.search(r'\d', each)
+            if srch is not None:
+                mystr += srch.group(0)
+            srch = re.search(r'\.', each)
+            if srch is not None and decimal is False:
+                mystr += srch.group(0)
+                decimal = True
+        return mystr
+        
+    def _evtLondonSpotChange(self, evt):
+        #only allow numbers and  one decimal
+        value = self.londonSpot_textCtrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            self.londonSpot_textCtrl.SetValue(newval)
+            self.londonSpot_textCtrl.SetInsertionPointEnd()
+        
+        #only allow numbers and  one decimal
+        value = self.percentLoss_textCtrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            self.percentLoss_textCtrl.SetValue(newval)
+            self.percentLoss_textCtrl.SetInsertionPointEnd()
+        #recalculate Estimated Total Value
+        self.SetEstTotal()
+        #recalculate each divers pay
+        self.updateCuts()
+        
+    def addDiverRow(self, name, hours, grams, oz, value):
+        divername_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, name, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        divername_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( divername_textCtrl, 0, wx.ALL, 5 )
+        
+        diverhours_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, hours, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diverhours_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( diverhours_textCtrl, 0, wx.ALL, 5 )
+        
+        divergrams_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, grams, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        divergrams_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( divergrams_textCtrl, 0, wx.ALL, 5 )
+        
+        diveroz_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, oz, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diveroz_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( diveroz_textCtrl, 0, wx.ALL, 5 )
+        
+        payvalue_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, value, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        payvalue_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( payvalue_textCtrl, 0, wx.ALL, 5)
+        
+        #0 hours, 1 grams, 2 oz, 3 value, 4 name        
+        self.diverRows.append( (diverhours_textCtrl, divergrams_textCtrl, diveroz_textCtrl, payvalue_textCtrl, divername_textCtrl) )
+    
+    def addExDiverRow(self, name, hours, grams, oz, value):
+        divername_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, name, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        divername_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( divername_textCtrl, 0, wx.ALL, 5 )
+        
+        diverhours_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, hours, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diverhours_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( diverhours_textCtrl, 0, wx.ALL, 5 )
+        
+        divergrams_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, grams, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        divergrams_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( divergrams_textCtrl, 0, wx.ALL, 5 )
+        
+        diveroz_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, oz, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diveroz_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( diveroz_textCtrl, 0, wx.ALL, 5 )
+        
+        payvalue_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, value, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        payvalue_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( payvalue_textCtrl, 0, wx.ALL, 5)
+                
+        self.exDiverRows.append( (diverhours_textCtrl, divergrams_textCtrl, diveroz_textCtrl, payvalue_textCtrl, divername_textCtrl) )
+    
+    def updateCuts(self):
+        for row in self.exDiverRows:
+            grams = float(row[1].GetValue())
+            row[3].SetValue( self.grams2EstDollars(grams) )
+    
+    def SetEstTotal(self):
+        dollars = self.grams2EstDollars(self.totalGrams)
+        self.estTotal_textCtrl.SetValue(dollars)
+        
+        dollars = self.grams2EstDollars(self.ownergrams)
+        self.ownerEstimate_textCtrl.SetValue(dollars)
+    
+    def _evtPrintView(self, evt):
+        #templates
+        top = """\
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<HTML>
+<HEAD>
+    <META HTTP-EQUIV="CONTENT-TYPE" CONTENT="text/html; charset=windows-1252">
+    <TITLE></TITLE>
+    <META NAME="GENERATOR" CONTENT="DiveRT">
+    <STYLE TYPE="text/css">
+    <!--
+        @page { margin: 0.79in }
+        P { margin-bottom: 0.08in }
+        TD P { margin-bottom: 0in }
+        A:link { so-language: zxx }
+    -->
+    </STYLE>
+</HEAD>
+<BODY LANG="en-US" DIR="LTR">
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><B>Dive RT Season Report</B></P>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>%s</B></I></P>
+<CENTER>
+    <TABLE WIDTH=316 BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+        <COL WIDTH=215>
+        <COL WIDTH=83>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Total Dive Hours</P>
+            </TD>
+            <TD WIDTH=83 >
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Total Grams Recovered</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Total Troy Ounces Recovered</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Average Ounces Per Hour</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>London Spot</P>
+            </TD>
+            <TD WIDTH=83 >
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Estimated Refinement Recovery</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Estimated Refinement Value</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Troy Ounces / Hour</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+    </TABLE>    
+</CENTER>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P><P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Dredge Owner Cut</B></I></P>
+<TABLE WIDTH=100%% BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+    <TR VALIGN=TOP>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Grams</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Estimated Value</P>
+        </TD>
+    </TR>
+    <TR VALIGN=TOP>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+    </TR>
+</TABLE>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P>\
+""" #%( round, hours, grams, spot, percentloss, estimate, ozperhr, ownerpercent, ownergrams, ownerestimate, oppercent, opgross, opnet, opestimate  )
+        
+        exDiveTop = """\
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Divers</B></I></P>
+<TABLE WIDTH=100% BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+    <TR VALIGN=TOP>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Diver Name</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Diver Hours</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Grams</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Troy Ounces</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Estimated Value</P>
+        </TD>
+    </TR>
+"""
+        
+        exDive = """\
+    <TR VALIGN=TOP>
+        <TD WIDTH=20%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+    </TR>
+""" #%( name, hours, rate, grams, estimate)
+            
+        bottom = """\
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><BR>
+</P>
+</BODY>
+</HTML>
+"""
+        
+        #compile templates
+        top = top %( self.dateRange_staticText.GetLabel(), 
+                     self.totalHours_textCtrl.GetValue(), 
+                     self.totalGrams_textCtrl.GetValue(),
+                     self.totalOz_textCtrl.GetValue(),
+                     self.ozPerHr_textCtrl.GetValue(),
+                     self.londonSpot_textCtrl.GetValue(), 
+                     self.percentLoss_textCtrl.GetValue(), 
+                     self.estTotal_textCtrl.GetValue(),
+                     self.ozPerHr_textCtrl.GetValue(),
+                     self.ownerGrams_textCtrl.GetValue(),
+                     self.ownerEstimate_textCtrl.GetValue() )
+        
+        if self.exDiverRows.__len__() > 0:
+            for row in self.exDiverRows:
+                exDiveTop += exDive %( row[4].GetValue(),
+                                       row[0].GetValue(),
+                                       row[1].GetValue(),
+                                       row[2].GetValue(),
+                                       row[3].GetValue() )
+            exDiveTop += "</TABLE>"
+        else:
+            exDiveTop = ""
+         
+        #write to html file
+        filepath = DiveRTDir+'\\DiveRT_Season.html'
+        fd = open( filepath, 'w' )
+        fd.write( top+exDiveTop+bottom )
+        fd.close()
+        os.startfile( filepath )
+        #open file in default browser
+        
+    def _evtClose(self, evt):
+        self.Destroy()
+
+class SeasonReportTahta(GUI.SeasonReportTahta): #POPUP WINDOW
+    def _evtInit(self, evt):
+        ds = Sql.DataStore(DiveRTdbFile)
+        #date range
+        self.dateRange_staticText.SetLabel( ds.GetSeasonDates() )
+        #total hours
+        hours = ds.GetSeasonHours()
+        self.totalHours_textCtrl.SetValue( str(hours) )
+        #total grams
+        self.totalGrams = ds.GetSeasonGrams()
+        self.totalGrams_textCtrl.SetValue( str(self.totalGrams) )
+        #total oz
+        oz = self.grams2TroyOz(self.totalGrams)
+        self.totalOz_textCtrl.SetValue( str(oz) )
+        #oz per hour
+        if (hours > 0.0):
+            ozPerHr = round( (oz/hours),2 )
+        else:
+            ozPerHr = 0.0
+        self.ozPerHr_textCtrl.SetValue( str(ozPerHr) )
+        #owner grams
+        self.ownergrams = round(ds.GetSeasonOwnerGrams(), 2)
+        self.ownerGrams_textCtrl.SetValue( str(self.ownergrams) )
+        #operator grams
+        self.operagrams = round(ds.GetSeasonOperGrams(), 2)
+        self.operatorGrams_textCtrl.SetValue( str(self.operagrams) )
+        #list of all diver hours
+        diverhours = ds.GetCleanupTotals()
+        ##Diver ... ladies firt
+        exDiverLst = ds.GetExtraDiverList()
+        self.exDiverRows = []
+        netMinus = 0.0
+        for diver in exDiverLst:
+            grams = ds.GetSeasonExtraDiverGrams(diver)
+            netMinus += grams
+            oz = self.grams2TroyOz(grams)
+            value = ""
+            if diverhours.has_key(diver):
+                self.addExDiverRow(diver, diverhours[diver], str(grams), str(oz), value)
+        if exDiverLst.__len__() == 0:
+            self.extraDiver_staticline.Hide()
+            self.extraDiver_staticText.Hide()
+            self.exName_staticText.Hide()
+            self.exHours_staticText.Hide()
+            self.exOz_staticText.Hide()
+            self.exGrams_staticText.Hide()
+            self.exValue_staticText.Hide()
+        #operator net grams
+        self.operNetGrams_textCtrl.SetValue( str(self.operagrams-netMinus) )
+        #operator divers
+        self.diverRows = []
+        diverLst = ds.GetOperatorDiverList()
+        for diver in diverLst:
+            grams = ds.GetSeasonDiverGrams(diver)
+            oz = self.grams2TroyOz(grams)
+            value = ""
+            try: self.addDiverRow(diver, diverhours[diver], str(grams), str(oz), value)
+            except KeyError: pass
+        self.londonSpot_textCtrl.SetValue( str(ds.GetAverageLondonSpot()) )
+        ds.Close()
+        
+        self.bSizerX.Fit( self.scrollwindow )
+        self.bSizer.Fit( self )
+        self.scrollwindow.Layout()
+        self.Layout()
+        
+        self.SetSize( (650, displaySize[1]) )
+        
+        self._evtLondonSpotChange(None)
+        
+    def grams2EstDollars(self, grams):
+        percentLoss = self.percentLoss_textCtrl.GetValue()
+        if percentLoss == '':
+            pct = 0
+        else:
+            pct = float( percentLoss ) / 100.0
+            
+        londonSpot = self.londonSpot_textCtrl.GetValue()
+        if londonSpot == '':
+            spot = 0
+        else:
+            spot = float( londonSpot )
+            
+        toz = self.grams2TroyOz(grams)
+            
+        return '$' + '{:20,.2f}'.format( round( toz*pct*spot, 2) ).strip()
+    
+    def grams2TroyOz(self, grams):
+        gramsPerToz = 31.1034768
+        return round((grams / gramsPerToz), 2)
+        
+    def floatstr(self, somestring):
+        mystr = ''
+        decimal = False
+        for each in somestring:
+            srch = re.search(r'\d', each)
+            if srch is not None:
+                mystr += srch.group(0)
+            srch = re.search(r'\.', each)
+            if srch is not None and decimal is False:
+                mystr += srch.group(0)
+                decimal = True
+        return mystr
+        
+    def _evtLondonSpotChange(self, evt):
+        #only allow numbers and  one decimal
+        value = self.londonSpot_textCtrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            self.londonSpot_textCtrl.SetValue(newval)
+            self.londonSpot_textCtrl.SetInsertionPointEnd()
+        #only allow numbers and  one decimal
+        value = self.percentLoss_textCtrl.GetValue()
+        newval = self.floatstr(value)
+        if newval != value:
+            self.percentLoss_textCtrl.SetValue(newval)
+            self.percentLoss_textCtrl.SetInsertionPointEnd()
+        #recalculate Estimated Total Value
+        self.SetEstTotal()
+        #recalculate each divers pay
+        self.updateCuts()
+        
+    def addDiverRow(self, name, hours, grams, oz, value):
+        divername_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, name, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        divername_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( divername_textCtrl, 0, wx.ALL, 5 )
+        
+        diverhours_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, hours, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diverhours_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( diverhours_textCtrl, 0, wx.ALL, 5 )
+        
+        divergrams_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, grams, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        divergrams_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( divergrams_textCtrl, 0, wx.ALL, 5 )
+        
+        diveroz_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, oz, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diveroz_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( diveroz_textCtrl, 0, wx.ALL, 5 )
+        
+        payvalue_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, value, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        payvalue_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.diving_fgSizer.Add( payvalue_textCtrl, 0, wx.ALL, 5)
+        
+        #0 hours, 1 grams, 2 oz, 3 value, 4 name        
+        self.diverRows.append( (diverhours_textCtrl, divergrams_textCtrl, diveroz_textCtrl, payvalue_textCtrl, divername_textCtrl) )
+    
+    def addExDiverRow(self, name, hours, grams, oz, value):
+        divername_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, name, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        divername_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( divername_textCtrl, 0, wx.ALL, 5 )
+        
+        diverhours_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, hours, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diverhours_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( diverhours_textCtrl, 0, wx.ALL, 5 )
+        
+        divergrams_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, grams, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        divergrams_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( divergrams_textCtrl, 0, wx.ALL, 5 )
+        
+        diveroz_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, oz, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        diveroz_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( diveroz_textCtrl, 0, wx.ALL, 5 )
+        
+        payvalue_textCtrl = wx.TextCtrl( self.scrollwindow, wx.ID_ANY, value, wx.DefaultPosition, wx.DefaultSize, wx.TE_READONLY )
+        payvalue_textCtrl.SetBackgroundColour( wx.Colour( 200, 200, 200 ) )
+        self.extraDiving_fgSizer.Add( payvalue_textCtrl, 0, wx.ALL, 5)
+                
+        self.exDiverRows.append( (diverhours_textCtrl, divergrams_textCtrl, diveroz_textCtrl, payvalue_textCtrl, divername_textCtrl) )
+    
+    def updateCuts(self):
+        for row in self.diverRows:
+            grams = float(row[1].GetValue())
+            row[3].SetValue( self.grams2EstDollars(grams) )
+        for row in self.exDiverRows:
+            grams = float(row[1].GetValue())
+            row[3].SetValue( self.grams2EstDollars(grams) )
+    
+    def SetEstTotal(self):
+        dollars = self.grams2EstDollars(self.totalGrams)
+        self.estTotal_textCtrl.SetValue(dollars)
+        
+        dollars = self.grams2EstDollars(self.ownergrams)
+        self.ownerEstimate_textCtrl.SetValue(dollars)
+        
+        dollars = self.grams2EstDollars(self.operagrams)
+        self.operatorEstimate_textCtrl.SetValue(dollars)
+    
+#    def _evtOnSize(self, evt):
+#        print "season size event"
+#        #self.scrollwindow.SetSize(self.GetClientSize())
+#        self.scrollwindow.SetSize(evt.GetSize())
+#        self.Layout()
+#        self.Refresh()
+    
+    def _evtPrintView(self, evt):
+        #templates
+        top = """\
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<HTML>
+<HEAD>
+    <META HTTP-EQUIV="CONTENT-TYPE" CONTENT="text/html; charset=windows-1252">
+    <TITLE></TITLE>
+    <META NAME="GENERATOR" CONTENT="DiveRT">
+    <STYLE TYPE="text/css">
+    <!--
+        @page { margin: 0.79in }
+        P { margin-bottom: 0.08in }
+        TD P { margin-bottom: 0in }
+        A:link { so-language: zxx }
+    -->
+    </STYLE>
+</HEAD>
+<BODY LANG="en-US" DIR="LTR">
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><B>Dive RT Season Report</B></P>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>%s</B></I></P>
+<CENTER>
+    <TABLE WIDTH=316 BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+        <COL WIDTH=215>
+        <COL WIDTH=83>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Total Dive Hours</P>
+            </TD>
+            <TD WIDTH=83 >
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Total Grams Recovered</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Total Troy Ounces Recovered</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Average Ounces Per Hour</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>London Spot</P>
+            </TD>
+            <TD WIDTH=83 >
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Estimated Refinement Recovery</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Estimated Refinement Value</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+        <TR VALIGN=TOP>
+            <TD WIDTH=215>
+                <P ALIGN=CENTER>Troy Ounces / Hour</P>
+            </TD>
+            <TD WIDTH=83>
+                <P ALIGN=CENTER>%s</P>
+            </TD>
+        </TR>
+    </TABLE>    
+</CENTER>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P><P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Dredge Owner Cut</B></I></P>
+<TABLE WIDTH=100%% BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+    <TR VALIGN=TOP>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Grams</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Estimated Value</P>
+        </TD>
+    </TR>
+    <TR VALIGN=TOP>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+    </TR>
+</TABLE>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P><P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Operator / Diver's Cut</B></I></P>
+<TABLE WIDTH=100%% BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+    <TR VALIGN=TOP>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Gross Grams</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Net Grams</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>Estimated Gross Value</P>
+        </TD>
+    </TR>
+    <TR VALIGN=TOP>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=25%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+    </TR>
+</TABLE>
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"></P>\
+""" #%( round, hours, grams, spot, percentloss, estimate, ozperhr, ownerpercent, ownergrams, ownerestimate, oppercent, opgross, opnet, opestimate  )
+        
+        DiveTop = """\
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Operator / Diver Distribution</B></I></P>
+<TABLE WIDTH=100% BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+    <TR VALIGN=TOP>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Diver Name</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Diver Hours</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Grams</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Troy Ounces</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Estimated Value</P>
+        </TD>
+    </TR>
+"""
+        
+        Dive = """\
+    <TR VALIGN=TOP>
+        <TD WIDTH=20%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+    </TR>
+""" #%( name, hours, grams, estimate)
+
+        exDiveTop = """\
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><I><B>Divers</B></I></P>
+<TABLE WIDTH=100% BORDER=1 BORDERCOLOR="#000000" CELLPADDING=4 CELLSPACING=0>
+    <TR VALIGN=TOP>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Diver Name</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Diver Hours</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Grams</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Troy Ounces</P>
+        </TD>
+        <TD WIDTH=20%>
+            <P ALIGN=CENTER>Estimated Value</P>
+        </TD>
+    </TR>
+"""
+        
+        exDive = """\
+    <TR VALIGN=TOP>
+        <TD WIDTH=20%%>
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+        <TD WIDTH=20%% >
+            <P ALIGN=CENTER>%s</P>
+        </TD>
+    </TR>
+""" #%( name, hours, rate, grams, estimate)
+            
+        bottom = """\
+<P ALIGN=CENTER STYLE="margin-bottom: 0in"><BR>
+</P>
+</BODY>
+</HTML>
+"""
+        
+        #compile templates
+        top = top %( self.dateRange_staticText.GetLabel(), 
+                     self.totalHours_textCtrl.GetValue(), 
+                     self.totalGrams_textCtrl.GetValue(),
+                     self.totalOz_textCtrl.GetValue(),
+                     self.ozPerHr_textCtrl.GetValue(),
+                     self.londonSpot_textCtrl.GetValue(), 
+                     self.percentLoss_textCtrl.GetValue(), 
+                     self.estTotal_textCtrl.GetValue(),
+                     self.ozPerHr_textCtrl.GetValue(),
+                     self.ownerGrams_textCtrl.GetValue(),
+                     self.ownerEstimate_textCtrl.GetValue(),
+                     self.operatorGrams_textCtrl.GetValue(),
+                     self.operNetGrams_textCtrl.GetValue(),
+                     self.operatorEstimate_textCtrl.GetValue() )
+        
+        for row in self.diverRows:
+            #0 hours, 1 grams, 2 oz, 3 value, 4 name
+            DiveTop += Dive %( row[4].GetValue(),
+                               row[0].GetValue(),
+                               row[1].GetValue(),
+                               row[2].GetValue(),
+                               row[3].GetValue() )
+        DiveTop += "</TABLE>"
+        
+        if self.exDiverRows.__len__() > 0:
+            for row in self.exDiverRows:
+                exDiveTop += exDive %( row[4].GetValue(),
+                                       row[0].GetValue(),
+                                       row[1].GetValue(),
+                                       row[2].GetValue(),
+                                       row[3].GetValue() )
+            exDiveTop += "</TABLE>"
+        else:
+            exDiveTop = ""
+         
+        #write to html file
+        filepath = DiveRTDir+'\\DiveRT_Season.html'
         fd = open( filepath, 'w' )
         fd.write( top+DiveTop+exDiveTop+bottom )
         fd.close()
@@ -969,94 +2412,111 @@ class Report(GUI.RoundReport): #POPUP WINDOW
     def _evtClose(self, evt):
         self.Destroy()
 
-class CrewManager(wx.Dialog): #POPUP WINDOW   
-    def __init__( self, parent ):
-        wx.Dialog.__init__ ( self, parent, id = wx.ID_ANY, title = u"Crew Manager", pos = wx.DefaultPosition, size = wx.DefaultSize, style = wx.DEFAULT_DIALOG_STYLE )
+class CrewManager(wx.Dialog): #POPUP WINDOW
+    def __init__( self, parent, vessel ):
+        wx.Dialog.__init__ ( self, parent, id = wx.ID_ANY, title = u"Crew Manager", pos = wx.DefaultPosition, size = wx.Size( 582,422 ), style = wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER )
         
-        self.SetSizeHintsSz( wx.DefaultSize, wx.DefaultSize )
+        #self.SetSizeHintsSz( wx.DefaultSize, wx.DefaultSize )
         
-        self.bxSizer1 = wx.BoxSizer( wx.VERTICAL)
-        #self.bxSizer2 = wx.BoxSizer( wx.VERTICAL )
+        self.bxSizer1 = wx.BoxSizer( wx.VERTICAL )
+        
+        self.scrollWin = wx.ScrolledWindow( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.HSCROLL|wx.VSCROLL )
+        self.scrollWin.SetScrollRate( 5, 5 )
         self.fgSizer = wx.FlexGridSizer( 99, 4, 0, 0 )
         self.fgSizer.SetFlexibleDirection( wx.BOTH )
         self.fgSizer.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
         
-        self.rowNumber = 0
-        self.rowStack = []
+        self.name_staticText = wx.StaticText( self.scrollWin, wx.ID_ANY, u"Name", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.name_staticText.Wrap( -1 )
+        self.fgSizer.Add( self.name_staticText, 0, wx.ALL, 5 )
         
-        self.bxSizer1.Add( self.fgSizer, 1, wx.EXPAND, 5)
-        #self.bxSizer2.Add( self.fgSizer, 1, wx.EXPAND, 5 )
+        self.duty_staticText = wx.StaticText( self.scrollWin, wx.ID_ANY, u"Duty", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.duty_staticText.Wrap( -1 )
+        self.fgSizer.Add( self.duty_staticText, 0, wx.ALL, 5 )
         
-        self.addStaticControls()
-
-        datastore = Sql.DataStore(DiveRTdbFile)
-        crewlist = datastore.GetCrewList()
-        for each in crewlist:
-            self.addRow( each[1], each[2], int(each[3]) )
-            tendRate = each[4]
-        self.tenderRate_textCtrl.SetValue(tendRate)
-        #print crewlist
-        datastore.Close()
-        self.addRow()
-        
-        self.Centre( wx.BOTH )
-        
-    def addStaticControls(self):
-        name_staticText = wx.StaticText( self, wx.ID_ANY, u"Name", wx.DefaultPosition, wx.DefaultSize, 0 )
-        name_staticText.Wrap( -1 )
-        self.fgSizer.Add( name_staticText, 0, wx.ALL, 5 )
-        
-        duty_staticText = wx.StaticText( self, wx.ID_ANY, u"Duty", wx.DefaultPosition, wx.DefaultSize, 0 )
-        duty_staticText.Wrap( -1 )
-        self.fgSizer.Add( duty_staticText, 0, wx.ALL, 5 )
-        
-        diveRate_staticText = wx.StaticText( self, wx.ID_ANY, u"Dive Rate  (% of time)", wx.DefaultPosition, wx.DefaultSize, 0 )
-        diveRate_staticText.Wrap( -1 )
-        self.fgSizer.Add( diveRate_staticText, 0, wx.ALL, 5 )
+        self.diveRate_staticText = wx.StaticText( self.scrollWin, wx.ID_ANY, u"Dive Rate  (% of time)", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.diveRate_staticText.Wrap( -1 )
+        self.fgSizer.Add( self.diveRate_staticText, 0, wx.ALL, 5 )
         
         self.fgSizer.AddSpacer( ( 0, 0), 1, wx.EXPAND, 5 )
         
+        self.rowNumber = 0
+        self.rowStack = []
+        datastore = Sql.DataStore(DiveRTdbFile)
+        crewlist = datastore.GetCrewList()
+        for each in crewlist:
+            name = each[1]
+            duty = each[2]
+            rate = each[3]
+            if (duty == u'Extra Diver'):
+                duty = u'Diver'
+            #self.addRow( each[1], each[2], int(each[3]) )
+            self.addRow( name, duty, int(rate) )
+        datastore.Close()
+        self.addRow() #add a blank row
+        
+#        self.name_textCtrl = wx.TextCtrl( self.scrollWin, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+#        self.fgSizer.Add( self.name_textCtrl, 0, wx.ALL, 5 )
+#        
+#        duty_choiceChoices = [ u"Diver and Tender", u"Tender" ]
+#        self.duty_choice = wx.Choice( self.scrollWin, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, duty_choiceChoices, 0 )
+#        self.duty_choice.SetSelection( 0 )
+#        self.fgSizer.Add( self.duty_choice, 0, wx.ALL, 5 )
+#        
+#        self.diveRate_spinCtrl = wx.SpinCtrl( self.scrollWin, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 25, 100, 50 )
+#        self.fgSizer.Add( self.diveRate_spinCtrl, 0, wx.ALL, 5 )
+        
+        self.scrollWin.SetSizer( self.fgSizer )
+        self.scrollWin.Layout()
+        self.fgSizer.Fit( self.scrollWin )
+        self.bxSizer1.Add( self.scrollWin, 1, wx.ALL|wx.EXPAND, 5 )
+        
         self.m_staticline16 = wx.StaticLine( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
         self.bxSizer1.Add( self.m_staticline16, 0, wx.EXPAND |wx.ALL, 5 )
-        
-        self.tenderRate_staticText = wx.StaticText( self, wx.ID_ANY, u"Tending Rate ($/hr)", wx.DefaultPosition, wx.DefaultSize, 0 )
-        self.tenderRate_staticText.Wrap( -1 )
-        self.bxSizer1.Add( self.tenderRate_staticText, 0, wx.ALL, 5 )
-        
-        self.tenderRate_textCtrl = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
-        self.bxSizer1.Add( self.tenderRate_textCtrl, 0, wx.ALL, 5)
-        
-        fgs = wx.FlexGridSizer( 1, 2, 0, 0 )
+                
+        fgs = wx.FlexGridSizer( 0, 2, 0, 0 )
         fgs.SetFlexibleDirection( wx.BOTH )
         fgs.SetNonFlexibleGrowMode( wx.FLEX_GROWMODE_SPECIFIED )
-        self.bxSizer1.Add( fgs, 0, wx.ALIGN_CENTER_HORIZONTAL, 5 )
         
         self.save_button = wx.Button( self, wx.ID_ANY, u"Save", wx.DefaultPosition, wx.DefaultSize, 0 )
         fgs.Add( self.save_button, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
-        self.save_button.Bind(wx.EVT_BUTTON, self._evtSave)
         
         self.cancel_button = wx.Button( self, wx.ID_ANY, u"Cancel", wx.DefaultPosition, wx.DefaultSize, 0 )
-        fgs.Add( self.cancel_button, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
+        fgs.Add( self.cancel_button, 0, wx.ALL, 5 )
+        
+        self.bxSizer1.Add( fgs, 0, wx.ALIGN_CENTER_HORIZONTAL, 5 )
+        
+        self.SetSizer( self.bxSizer1 )
+        self.Layout()
+        self.bxSizer1.Fit( self )
+        
+        self.SetSize( (600, displaySize[1]/1.5) )
+        
+        self.Centre( wx.BOTH )
+        
+        #Bind events
+        self.save_button.Bind( wx.EVT_BUTTON, self._evtSave )
         self.cancel_button.Bind( wx.EVT_BUTTON, self._evtClose )
-        
         self.Bind( wx.EVT_CLOSE, self._evtClose )
-        self.tenderRate_textCtrl.Bind( wx.EVT_TEXT, self._evtTendRateTxt )
         
-    def addRow(self, Name="", Duty="Extra Diver", DiveRate=45):
+    def addRow(self, Name="", Duty="Diver", DiveRate=30):
         #print 'adding row#', self.rowNumber
-        name_textCtrl = wx.TextCtrl( self, wx.ID_ANY, Name, wx.DefaultPosition, wx.DefaultSize, 0 )
+        name_textCtrl = wx.TextCtrl( self.scrollWin, wx.ID_ANY, Name, wx.DefaultPosition, wx.DefaultSize, 0 )
         self.fgSizer.Add( name_textCtrl, 0, wx.ALL, 5 )
         
-        duty_choiceChoices = [ u"Operator Diver", u"Extra Diver", u"Tender" ]
-        duty_choice = wx.Choice( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, duty_choiceChoices, 0 )
+        if (vessel == "Tahta"):
+            duty_choiceChoices = [ u"Operator Diver", u"Diver", u"Tender" ]
+        else:
+            duty_choiceChoices = [ u"Diver", u"Tender" ]
+        duty_choice = wx.Choice( self.scrollWin, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, duty_choiceChoices, 0 )
         duty_choice.SetStringSelection(Duty)
         self.fgSizer.Add( duty_choice, 0, wx.ALL, 5 )
         
-        diveRate_spinCtrl = wx.SpinCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 25, 100, 45 )
+        diveRate_spinCtrl = wx.SpinCtrl( self.scrollWin, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 25, 100, 45 )
         diveRate_spinCtrl.SetValue(DiveRate)
         self.fgSizer.Add( diveRate_spinCtrl, 0, wx.ALL, 5 )
         
-        delete_button = wx.Button( self, wx.ID_ANY, u"Delete", wx.DefaultPosition, wx.DefaultSize, 0 )
+        delete_button = wx.Button( self.scrollWin, wx.ID_ANY, u"Delete", wx.DefaultPosition, wx.DefaultSize, 0 )
         self.fgSizer.Add( delete_button, 0, wx.ALL, 5 )
         
         self.SetSizer( self.bxSizer1)
@@ -1073,6 +2533,8 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         self.rowNumber += 1
         
     def deleteRow(self, rownum):
+        size = self.GetSize()
+        pos = self.GetPosition()
         #print 'deleting row: ', rownum
         listofdestroy = self.rowStack[rownum]
         for each in listofdestroy:
@@ -1084,10 +2546,13 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
         self.SetSizer( self.bxSizer1)
         self.Layout()
         self.bxSizer1.Fit( self )
+        
+        self.SetSize(size)
+        self.SetPosition(pos)
     
     def _evtDuty(self, evt, rownum):
         rowobjlst = self.rowStack[rownum]
-        if rowobjlst[1].GetStringSelection() == "Extra Diver":
+        if rowobjlst[1].GetStringSelection() == "Diver":
             rowobjlst[2].Enable() #diveRate_spinCtrl.Enable()
         else:
             rowobjlst[2].Disable()
@@ -1108,18 +2573,22 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
     def _evtNameTxt(self, evt, rownum):
         #print 'typing in: ', rownum
         if rownum == self.rowNumber - 1:
+            size = self.GetSize()
+            pos = self.GetPosition()
             self.addRow()
+            self.SetSize(size)
+            self.SetPosition(pos)
             
-    def _evtTendRateTxt(self, evt):
-        #only allow numbers and  one decimal
-        ctrl = evt.GetEventObject()
-        value = ctrl.GetValue()
-        newval = self.floatstr(value)
-        if newval != value:
-            ctrl.SetValue(newval)
-            ctrl.SetInsertionPointEnd()
-        if newval != '':
-            ctrl.SetInsertionPointEnd()
+#    def _evtTendRateTxt(self, evt):
+#        #only allow numbers and  one decimal
+#        ctrl = evt.GetEventObject()
+#        value = ctrl.GetValue()
+#        newval = self.floatstr(value)
+#        if newval != value:
+#            ctrl.SetValue(newval)
+#            ctrl.SetInsertionPointEnd()
+#        if newval != '':
+#            ctrl.SetInsertionPointEnd()
             
     def _evtDelete(self, evt, rownum):
         self.deleteRow(rownum)
@@ -1134,27 +2603,46 @@ class CrewManager(wx.Dialog): #POPUP WINDOW
                 else:
                     condition2 = False #empty name found
                     
-        if condition1 and condition2 and (self.tenderRate_textCtrl.GetValue() != ""):
+        if condition1 and condition2: # and (self.tenderRate_textCtrl.GetValue() != ""):
             datastore = Sql.DataStore(DiveRTdbFile)
             datastore.DropCrewData()
             for each in self.rowStack[0:-1]:
                 if each is not None:
                     #print each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), each[3].GetValue()
-                    datastore.AddCrew(each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), self.tenderRate_textCtrl.GetValue() )
+                    datastore.AddCrew(each[0].GetValue(), each[1].GetStringSelection(), each[2].GetValue(), 0 ) #self.tenderRate_textCtrl.GetValue() )
             datastore.Close()
             frame.divepanel.updateDiverTenderChoice()
             frame.divepanel.diver_choice.SetSelection(0)
-            frame.divepanel.tender_choice.SetSelection(0)
+            #frame.divepanel.tender_choice.SetSelection(0)
             self.Destroy()
     
     def _evtClose(self, evt):
+        evt.Skip()
         self.Destroy()
-
+        
 class About(GUI.About): #POPUP WINDOW
     def _evtOK(self, evt):
         global aboutok
+        global vessel
         aboutok = True
         frame.Show()
+        self.Destroy()
+        if (vessel == None):
+            vessel = VesselSelect(None)
+            vessel.ShowModal()
+
+class VesselSelect(GUI.VesselSelect):
+    def _evtInit(self, evt):
+        if (vessel != None):
+            print "current vessel:", vessel
+            self.vessel_choice.SetStringSelection(str(vessel))
+        
+    def _evtOK(self, evt):
+        global vessel
+        ds = Sql.DataStore(DiveRTdbFile)
+        vessel = self.vessel_choice.GetStringSelection()
+        ds.SetVessel(vessel)
+        ds.Close()
         self.Destroy()
 
 class DataPanel(GUI.DataPanel): #AUI PANEL
@@ -1271,7 +2759,7 @@ class DivePanel(GUI.DivePanel): #AUI PANEL frame.divepanel
                 seconds += stop-start
         if seconds < 0:
             seconds = seconds + 86400 #24 hours
-        self.total_textCtrl.SetLabel(self.SecondsToHMString(seconds))
+        self.total_textCtrl.SetValue(self.SecondsToHMString(seconds))
         
         try:
             hsec = int(self.TargetHr_textCtrl.GetValue())*3600
@@ -1283,9 +2771,9 @@ class DivePanel(GUI.DivePanel): #AUI PANEL frame.divepanel
             msec = 0
         seconds = (hsec + msec) - seconds
         if seconds >= 0:
-            self.countdown_textCtrl.SetLabel(self.SecondsToHMString(seconds))
+            self.countdown_textCtrl.SetValue(self.SecondsToHMString(seconds))
         else:
-            self.countdown_textCtrl.SetLabel('Target Reached!')
+            self.countdown_textCtrl.SetValue('Target Reached!')
             
     def _evtTargetHr(self, evt):
         val = str(self.TargetHr_textCtrl.GetValue())
@@ -1540,7 +3028,7 @@ class GridGridPanel( scrolled.ScrolledPanel ): #GRID STUFF
     def __init__( self, parent ):
         scrolled.ScrolledPanel.__init__( self, parent, -1)
         self.bSizer = wx.BoxSizer( wx.VERTICAL )
-        self.grid = CustTableGrid(self,  'C:\ProgramData\DiveRT\DiveRT.db')
+        self.grid = CustTableGrid(self,  DiveRTdbFile)
         self.bSizer.Add( self.grid, 0, wx.ALL, 5 )
         self.SetSizer( self.bSizer )
         self.SetAutoLayout(1)
@@ -1577,8 +3065,11 @@ class GridPanel ( wx.Panel ): #END GRID STUFF
         self.newRound_button = wx.Button( self, wx.ID_ANY, u"Start New Round", wx.DefaultPosition, wx.DefaultSize, 0 )
         fgSizer12.Add( self.newRound_button, 0, wx.ALL, 5 )
         
-        self.report_button = wx.Button( self, wx.ID_ANY, u"View Round Report", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.report_button = wx.Button( self, wx.ID_ANY, u"Round Report", wx.DefaultPosition, wx.DefaultSize, 0 )
         fgSizer12.Add( self.report_button, 0, wx.ALL, 5 )
+        
+        self.yearReport_button = wx.Button( self, wx.ID_ANY, u"Season Report", wx.DefaultPosition, wx.DefaultSize, 0 )
+        fgSizer12.Add( self.yearReport_button, 0, wx.ALL, 5 )
         
         #self.map_button = wx.Button( self, wx.ID_ANY, u"View Map", wx.DefaultPosition, wx.DefaultSize, 0 )
         #fgSizer12.Add( self.map_button, 0, wx.ALL, 5 )
@@ -1596,7 +3087,8 @@ class GridPanel ( wx.Panel ): #END GRID STUFF
         self.cround_choice.Bind( wx.EVT_CHOICE, self._evtRoundChange )
         self.newRound_button.Bind( wx.EVT_BUTTON, self._evtNewRound )
         self.report_button.Bind( wx.EVT_BUTTON, self._evtReport )
-        #self.map_button.Bind( wx.EVT_BUTTON, self._evtMap )   
+        self.yearReport_button.Bind( wx.EVT_BUTTON, self._evtSeasonReport )
+        #self.map_button.Bind( wx.EVT_BUTTON, self._evtMap )
     
     def _evtRefresh(self, evt=None):
         self.grid.grid.Table = Grid.CustomDataTable(CleanupRound, DiveRTdbFile)
@@ -1653,12 +3145,32 @@ class GridPanel ( wx.Panel ): #END GRID STUFF
             self.cround_choice.SetSelection( CleanupRound-1 )
             self._evtRoundChange()
             self.newRound_button.SetLabel( u"Start New Round")
+            
+    def _evtSeasonReport(self, evt=None):
+        ds = Sql.DataStore(DiveRTdbFile) 
+        
+        #if ds.IsCleanupData():
+        if (ds.GetSeasonHours() != 0.0):
+            if (vessel == 'Tahta'):
+                seasonReport = SeasonReportTahta(None)
+            else:
+                seasonReport = SeasonReport(None)
+            seasonReport.SetPosition( wx.Point(-1,0) )
+            seasonReport.ShowModal()
+        else:
+            msgDlg = MsgDialog( self )
+            msgDlg.changeMessage( u"There is no data for this season. \n Report is not available.")
+            msgDlg.ShowModal()
+        ds.Close()
         
     def _evtReport(self, evt):
-        check = False
+        #check = False
         ds = Sql.DataStore(DiveRTdbFile)
         if ds.GetTotalHours( CleanupRound ) != "0.0":
-            report = Report(None)
+            if (vessel == 'Tahta'):
+                report = ReportTahta(None)
+            else:
+                report = Report(None)
             report.SetPosition( wx.Point(-1,0) )
             report.ShowModal()
         else:
@@ -1712,14 +3224,17 @@ class AUIFrame(wx.Frame): #AUI FRAME
         self.divepanel = DivePanel(self) #create dive panel
         self.divepanel.init()
         self.listpanel = DetailPanel(self) #create list panel
-        self.listpanel.init() 
+        self.listpanel.init()
         self.DefaultLayout()
         self.BindEvents()
+        self.default_perspective = self._mgr.SavePerspective()
+        self._mgr.Update()# tell the manager to 'commit' all the changes just made
         
     def CreateMenu(self):
         self.MenuBar = wx.MenuBar( 0 )
         self.file_menu = wx.Menu()
         self.map_menu = wx.Menu()
+        self.view_menu = wx.Menu()
         
         #self.export_menuItem = wx.MenuItem( self.file_menu, wx.ID_ANY, u"Export Map", wx.EmptyString, wx.ITEM_NORMAL )
         #self.file_menu.AppendItem( self.export_menuItem )
@@ -1731,19 +3246,31 @@ class AUIFrame(wx.Frame): #AUI FRAME
         self.gps_menuItem = wx.MenuItem( self.file_menu, wx.ID_ANY, u"GPS Settings", wx.EmptyString, wx.ITEM_NORMAL )
         self.file_menu.AppendItem( self.gps_menuItem )
         
-        self.quit_menuItem = wx.MenuItem( self.file_menu, wx.ID_ANY, u"Quit", wx.EmptyString, wx.ITEM_NORMAL )
-        self.file_menu.AppendItem( self.quit_menuItem )
+        self.vessel_menuItem = wx.MenuItem( self.file_menu, wx.ID_ANY, u"Vessel", wx.EmptyString, wx.ITEM_NORMAL )
+        self.file_menu.AppendItem( self.vessel_menuItem )
         
         self.about_menuItem = wx.MenuItem( self.file_menu, wx.ID_ANY, u"About", wx.EmptyString, wx.ITEM_NORMAL )
         self.file_menu.AppendItem( self.about_menuItem )
         
-        self.MenuBar.Append( self.file_menu, u"Menu" )
-        self.MenuBar.Append( self.map_menu, u"Map" )
-        self.SetMenuBar( self.MenuBar )
+        self.quit_menuItem = wx.MenuItem( self.file_menu, wx.ID_ANY, u"Quit", wx.EmptyString, wx.ITEM_NORMAL )
+        self.file_menu.AppendItem( self.quit_menuItem )
         
         ###Map menu items
         self.viewmap_menuItem = wx.MenuItem( self.map_menu, wx.ID_ANY, u"View Map in Google Earth", wx.EmptyString, wx.ITEM_NORMAL )
         self.map_menu.AppendItem( self.viewmap_menuItem )
+        
+        ###View menu items
+        #self.savePerspective = wx.MenuItem( self.view_menu, wx.ID_ANY, u"Save This Perspective", wx.EmptyString, wx.ITEM_NORMAL )
+        #self.view_menu.AppendItem( self.savePerspective )
+        self.loadDefaultPerspective = wx.MenuItem( self.view_menu, wx.ID_ANY, u"Reset default window positions", wx.EmptyString, wx.ITEM_NORMAL )
+        self.view_menu.AppendItem( self.loadDefaultPerspective )
+        #self.loadSavedPerspective = wx.MenuItem( self.view_menu, wx.ID_ANY, u"Load Saved Perspective", wx.EmptyString, wx.ITEM_NORMAL )
+        #self.view_menu.AppendItem( self.loadSavedPerspective )
+        
+        self.MenuBar.Append( self.file_menu, u"Menu" )
+        self.MenuBar.Append( self.map_menu, u"Map" )
+        self.MenuBar.Append( self.view_menu, u"View")
+        self.SetMenuBar( self.MenuBar )
                 
     def DefaultLayout(self):
         # add the panes to the manager
@@ -1777,14 +3304,15 @@ class AUIFrame(wx.Frame): #AUI FRAME
                           Name('divepanel'))
         self.divepanelPane = self._mgr.GetPane('divepanel')
         
-        self._mgr.AddPane(self.grid, wx.CENTER)
-#        self._mgr.AddPane(self.grid, wx.aui.AuiPaneInfo().Layer(0).
-#                          MinSize(self.grid.GetBestSizeTuple()).
-#                          Caption("Grid").CloseButton(False).
-#                          MaximizeButton(False).
-#                          Name('gridpanel'))
+        self._mgr.AddPane(self.grid, wx.aui.AuiPaneInfo().Layer(0).Row(0).Position(0).Direction(5).
+                          MinSize(self.grid.GetBestSizeTuple()).
+                          Caption("Grid").CloseButton(False).
+                          MaximizeButton(False).
+                          Name('gridpanel'))
+        gridPane = self._mgr.GetPane('gridpanel')
+        self._mgr.LoadPaneInfo('state=768', gridPane)
 
-        self._mgr.Update()# tell the manager to 'commit' all the changes just made
+        #self._mgr.Update()# tell the manager to 'commit' all the changes just made
     
     def BindEvents(self):
         self.Bind(wx.EVT_CLOSE, self._evtClose)
@@ -1792,8 +3320,32 @@ class AUIFrame(wx.Frame): #AUI FRAME
         self.Bind(wx.EVT_MENU, self._evtClose, id = self.quit_menuItem.GetId())
         self.Bind(wx.EVT_MENU, self._evtGPSSettings, id = self.gps_menuItem.GetId())
         self.Bind(wx.EVT_MENU, self._evtShowAbout, id = self.about_menuItem.GetId())
+        self.Bind(wx.EVT_MENU, self._evtVessel, id = self.vessel_menuItem.GetId())
+        
+        self.Bind(wx.EVT_SHOW, self._evtSavedPerspective)
+        
+        #self.Bind(wx.EVT_MENU, self._evtSaveThisPerspective, id = self.savePerspective.GetId())
+        #self.Bind(wx.EVT_MENU, self._evtSavedPerspective, id = self.loadSavedPerspective.GetId())
         
         self.Bind( wx.EVT_MENU, self._evtMap, id = self.viewmap_menuItem.GetId() )
+        self.Bind(wx.EVT_MENU, self._evtDefaultPerspective, id = self.loadDefaultPerspective.GetId() )
+        
+    def _evtDefaultPerspective(self, evt):
+        self._mgr.LoadPerspective( self.default_perspective )
+        #print "default perspective:", self.default_perspective
+        
+    def _evtSavedPerspective(self, evt=None):
+        ds = Sql.DataStore(DiveRTdbFile)
+        self.savedPerspective = ds.GetSavedPerspective()
+        if self.savedPerspective != None:
+            self._mgr.LoadPerspective( self.savedPerspective )
+            #print "saved perspective:", self.savedPerspective
+        ds.Close()
+        
+    def _evtSaveThisPerspective(self, evt=None):
+        ds = Sql.DataStore(DiveRTdbFile)
+        ds.SavePerspective(self._mgr.SavePerspective())
+        ds.Close()
         
     def _evtMap(self, evt):
         #look for google earth
@@ -1804,10 +3356,15 @@ class AUIFrame(wx.Frame): #AUI FRAME
         elif os.path.isfile( filepath32 ):
             os.startfile( "C:\\ProgramData\\DiveRT\\DiveRT.kml" )
         else:
-            print 'google earth isn\'t installed'
+            print 'google earth isn\'t installed or this isn\'t Windows'
         
+    def _evtVessel(self, evt):
+        vessel = VesselSelect(None)
+        vessel.ShowModal()
+    
     def _evtShowAbout(self, evt):
         about = About(None)
+        about.titleVersion.SetLabel(version)
         about.ShowModal()
         
     def _evtGPSSettings(self, evt):
@@ -1815,10 +3372,11 @@ class AUIFrame(wx.Frame): #AUI FRAME
         gpswindow.ShowModal()
         
     def _evtManageCrew(self, evt):
-        crewmanager = CrewManager(None)
+        crewmanager = CrewManager(None, vessel)
         crewmanager.ShowModal()
     
     def _evtClose(self, evt):
+        self._evtSaveThisPerspective(None)
         self.Hide()
         if hasattr(self, 'gps'):
             #print 'closing gps connection'
@@ -1834,8 +3392,14 @@ def Main():
     global DiveRTdbFile
     global IconDir
     global diveKml
-    DiveRTDir = 'C:\\ProgramData\\DiveRT'
-    DiveRTdbFile = 'C:\\ProgramData\\DiveRT\\DiveRT.db'
+    global sys
+    sys = system()
+    if sys == "Windows":
+        DiveRTDir = 'C:\\ProgramData\\DiveRT'
+        DiveRTdbFile = 'C:\\ProgramData\\DiveRT\\DiveRT.db'
+    if sys== "Linux":
+        DiveRTDir = os.path.expanduser('~') + '/.DiveRT'
+        DiveRTdbFile = os.path.expanduser('~') + '/.DiveRT/DiveRT.db'
     
     if not os.path.isdir(DiveRTDir):
         #print 'creating', DiveRTDir
@@ -1850,14 +3414,19 @@ def Main():
     diveKml.writeKmlToServer()
     
     ds = Sql.DataStore(DiveRTdbFile)
+    global version
+    version = "DiveRT v2.0"
+    ds.VersionCheck(version)
     global CleanupRound
     CleanupRound = ds.GetLastCleanupRound()
-    #print 'Setting CleanupRound', CleanupRound
+    global vessel
+    vessel = ds.GetVessel()
     ds.Close()
-    
+    #print 'Setting CleanupRound', CleanupRound
     app = wx.App(redirect=False)
     
     aboutdlg = About(None)
+    aboutdlg.titleVersion.SetLabel(version)
     aboutdlg.Show()
     
     global frame
@@ -1866,6 +3435,10 @@ def Main():
     frame.divepanel._evtDiverChoice() #force event to populate listbox if diver had dives on this date
     frame.datapanel.init()
     frame.grid.updateRoundChoices()
+    
+    global displaySize
+    displaySize = wx.DisplaySize()
+    frame.SetSize(displaySize)
     
     app.MainLoop()
 

@@ -2,7 +2,7 @@
 !include "WinMessages.nsh"
 
 Name "Dive Recover Tracker"
-OutFile "DiveRT_1.06_Setup.exe"
+OutFile "DiveRT_2.0_Setup.exe"
 InstallDir $PROGRAMFILES32\DiveRT
 
 !insertmacro MUI_PAGE_WELCOME
